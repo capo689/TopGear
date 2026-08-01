@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dependent selects</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+      label { display: block; margin: 0.75rem 0 0.15rem; font-weight: 600; }
+      select { width: 100%; padding: 0.4rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Shipping region</h1>
+    <p>State is disabled until a country is chosen, then populates asynchronously.</p>
+    <form id="region">
+      <label for="country">Country</label>
+      <select id="country" name="country">
+        <option value="">Select…</option>
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+      </select>
+
+      <label for="state">State / Province</label>
+      <select id="state" name="state" disabled>
+        <option value="">Select a country first</option>
+      </select>
+    </form>
+
+    <script>
+      const REGIONS = {
+        US: [["CA", "California"], ["OR", "Oregon"], ["NY", "New York"]],
+        CA: [["BC", "British Columbia"], ["ON", "Ontario"], ["QC", "Quebec"]],
+      };
+      const country = document.getElementById("country");
+      const state = document.getElementById("state");
+      country.addEventListener("change", () => {
+        state.disabled = true;
+        state.innerHTML = '<option value="">Loading…</option>';
+        const chosen = country.value;
+        // Async population — the daemon's embedded wait bridges this in one batch.
+        setTimeout(() => {
+          if (!chosen || !REGIONS[chosen]) {
+            state.innerHTML = '<option value="">Select a country first</option>';
+            state.disabled = true;
+            return;
+          }
+          state.innerHTML =
+            '<option value="">Select…</option>' +
+            REGIONS[chosen].map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+          state.disabled = false;
+        }, 250);
+      });
+    </script>
+  </body>
+</html>

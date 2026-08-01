@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Native 20-field form</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+      label { display: block; margin: 0.75rem 0 0.15rem; font-weight: 600; }
+      input, select, textarea { width: 100%; padding: 0.4rem; box-sizing: border-box; }
+      fieldset { margin: 0.75rem 0; }
+      .status { margin-top: 1rem; font-weight: 600; }
+      button { margin-top: 1rem; padding: 0.5rem 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Job Application</h1>
+    <!-- Same-origin submit: not an exfiltration target by default. -->
+    <form id="application" action="/forms/submit" method="post" novalidate>
+      <label for="firstName">First name</label>
+      <input id="firstName" name="firstName" type="text" autocomplete="given-name" required />
+
+      <label for="lastName">Last name</label>
+      <input id="lastName" name="lastName" type="text" autocomplete="family-name" required />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required />
+
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" autocomplete="tel" />
+
+      <label for="company">Current company</label>
+      <input id="company" name="company" type="text" autocomplete="organization" />
+
+      <label for="jobTitle">Current title</label>
+      <input id="jobTitle" name="jobTitle" type="text" autocomplete="organization-title" />
+
+      <label for="address1">Address line 1</label>
+      <input id="address1" name="address1" type="text" autocomplete="address-line1" />
+
+      <label for="address2">Address line 2</label>
+      <input id="address2" name="address2" type="text" autocomplete="address-line2" />
+
+      <label for="city">City</label>
+      <input id="city" name="city" type="text" autocomplete="address-level2" />
+
+      <label for="state">State</label>
+      <select id="state" name="state" autocomplete="address-level1">
+        <option value="">Select…</option>
+        <option value="CA">California</option>
+        <option value="OR">Oregon</option>
+        <option value="WA">Washington</option>
+        <option value="NY">New York</option>
+      </select>
+
+      <label for="postalCode">Postal code</label>
+      <input id="postalCode" name="postalCode" type="text" autocomplete="postal-code" />
+
+      <label for="country">Country</label>
+      <select id="country" name="country" autocomplete="country-name">
+        <option value="">Select…</option>
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+        <option value="GB">United Kingdom</option>
+      </select>
+
+      <label for="birthDate">Date of birth</label>
+      <input id="birthDate" name="birthDate" type="date" autocomplete="bday" />
+
+      <label for="website">Portfolio URL</label>
+      <input id="website" name="website" type="url" autocomplete="url" />
+
+      <label for="yearsExperience">Years of experience</label>
+      <input id="yearsExperience" name="yearsExperience" type="number" min="0" max="60" />
+
+      <label for="desiredSalary">Desired salary</label>
+      <input id="desiredSalary" name="desiredSalary" type="number" min="0" />
+
+      <label for="availableStart">Available start date</label>
+      <input id="availableStart" name="availableStart" type="date" />
+
+      <fieldset>
+        <legend>Referral source</legend>
+        <label><input type="radio" name="referral" value="search" /> Search</label>
+        <label><input type="radio" name="referral" value="friend" /> Friend</label>
+        <label><input type="radio" name="referral" value="event" /> Event</label>
+      </fieldset>
+
+      <label><input id="remoteOk" name="remoteOk" type="checkbox" /> Open to remote</label>
+
+      <label for="coverLetter">Cover letter</label>
+      <textarea id="coverLetter" name="coverLetter" rows="4"></textarea>
+
+      <label><input id="agreeTerms" name="agreeTerms" type="checkbox" required /> I agree to the terms</label>
+
+      <button id="submit" type="submit">Submit application</button>
+    </form>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <script>
+      // Same-origin, no network: record a submit locally so tests can verify intent
+      // without any exfiltration.
+      document.getElementById("application").addEventListener("submit", (e) => {
+        e.preventDefault();
+        document.getElementById("status").textContent = "Application submitted";
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "@browser-bridge/fixture-farm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted gauntlet site: the real code path tests run against (plan §12).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "public"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/cli.js",
+    "clean": "rimraf dist *.tsbuildinfo"
+  }
+}

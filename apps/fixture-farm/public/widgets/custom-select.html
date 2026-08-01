@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Custom combobox</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+      .combo { position: relative; width: 18rem; }
+      .combo__button { width: 100%; text-align: left; padding: 0.5rem; border: 1px solid #999; background: #fff; }
+      .combo__list { position: absolute; left: 0; right: 0; margin: 0; padding: 0; list-style: none;
+        border: 1px solid #999; background: #fff; max-height: 12rem; overflow: auto; }
+      .combo__list[hidden] { display: none; }
+      .combo__option { padding: 0.4rem 0.5rem; cursor: pointer; }
+      .combo__option[aria-selected="true"] { background: #e5efff; }
+      .combo__option:hover { background: #f0f0f0; }
+    </style>
+  </head>
+  <body>
+    <h1>Custom combobox</h1>
+    <p>ARIA combobox/listbox with no native <code>&lt;select&gt;</code> — a custom WidgetKind.</p>
+
+    <div class="combo" id="framework-combo">
+      <button
+        class="combo__button"
+        id="framework-button"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="framework-list"
+        aria-haspopup="listbox"
+      >
+        Select a framework…
+      </button>
+      <ul class="combo__list" id="framework-list" role="listbox" aria-label="Framework" hidden>
+        <li class="combo__option" role="option" data-value="react" aria-selected="false">React</li>
+        <li class="combo__option" role="option" data-value="vue" aria-selected="false">Vue</li>
+        <li class="combo__option" role="option" data-value="svelte" aria-selected="false">Svelte</li>
+        <li class="combo__option" role="option" data-value="solid" aria-selected="false">Solid</li>
+      </ul>
+      <input type="hidden" id="framework" name="framework" value="" />
+    </div>
+
+    <script>
+      const button = document.getElementById("framework-button");
+      const list = document.getElementById("framework-list");
+      const hidden = document.getElementById("framework");
+      const options = [...list.querySelectorAll('[role="option"]')];
+
+      function open() {
+        list.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+      }
+      function close() {
+        list.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+      }
+      function choose(opt) {
+        options.forEach((o) => o.setAttribute("aria-selected", String(o === opt)));
+        hidden.value = opt.dataset.value;
+        button.textContent = opt.textContent;
+        close();
+      }
+
+      button.addEventListener("click", () => (list.hidden ? open() : close()));
+      options.forEach((opt) => opt.addEventListener("click", () => choose(opt)));
+      document.addEventListener("click", (e) => {
+        if (!document.getElementById("framework-combo").contains(e.target)) close();
+      });
+    </script>
+  </body>
+</html>

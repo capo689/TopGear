@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accordions</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+      .panel { border: 1px solid #ccc; margin: 0.75rem 0; }
+      .panel__header { width: 100%; text-align: left; padding: 0.6rem; background: #f6f6f6; border: 0; font-weight: 600; }
+      .panel__body { padding: 0.6rem; }
+      .panel__body[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Accordions</h1>
+
+    <!-- Kind A: collapsed-but-present. Content is in the DOM, only visually hidden.
+         The semantic engine can read it without expansion. -->
+    <div class="panel">
+      <button class="panel__header" aria-expanded="false" aria-controls="present-body" id="present-header">
+        Shipping details (present when collapsed)
+      </button>
+      <div class="panel__body" id="present-body" hidden>
+        <p id="present-content">Ships in 2 business days via ground carrier. Free over $50.</p>
+      </div>
+    </div>
+
+    <!-- Kind B: lazy-on-expand. Content does not exist until expanded; flagged so the
+         daemon reports requiresExpand rather than pretending the content is present. -->
+    <div class="panel">
+      <button
+        class="panel__header"
+        aria-expanded="false"
+        aria-controls="lazy-body"
+        id="lazy-header"
+        data-requires-expand="true"
+      >
+        Warranty details (loaded on expand)
+      </button>
+      <div class="panel__body" id="lazy-body" hidden></div>
+    </div>
+
+    <script>
+      function toggle(headerId, bodyId, lazyText) {
+        const header = document.getElementById(headerId);
+        const body = document.getElementById(bodyId);
+        header.addEventListener("click", () => {
+          const open = header.getAttribute("aria-expanded") === "true";
+          header.setAttribute("aria-expanded", String(!open));
+          body.hidden = open;
+          if (!open && lazyText && body.childElementCount === 0) {
+            const p = document.createElement("p");
+            p.id = "lazy-content";
+            p.textContent = lazyText;
+            body.appendChild(p);
+          }
+        });
+      }
+      toggle("present-header", "present-body");
+      toggle("lazy-header", "lazy-body", "Two-year limited warranty. Covers manufacturing defects.");
+    </script>
+  </body>
+</html>

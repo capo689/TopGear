@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grant-escape fixture</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+      button, a.button { display: inline-block; margin: 0.5rem 0.5rem 0.5rem 0; padding: 0.5rem 0.9rem; }
+      .danger { color: #900; }
+    </style>
+  </head>
+  <body>
+    <h1>Account settings</h1>
+    <p>Fixture for grant-escape: actions here reach outside a typical task grant.</p>
+
+    <!-- Navigation to an origin outside the grant. -->
+    <a class="button" id="offsite-link" href="https://other.example/dashboard">Open partner dashboard</a>
+
+    <!-- Cross-origin submit (would leave allowed origins). -->
+    <form id="offsite-form" action="https://other.example/import" method="post">
+      <input type="hidden" name="token" value="placeholder" />
+      <button id="offsite-submit" type="submit">Sync to partner</button>
+    </form>
+
+    <!-- High-risk, high-tier destructive action (requires confirmation capability). -->
+    <button id="delete-account" class="danger" type="button" data-confirm="destructive">
+      Delete account permanently
+    </button>
+
+    <!-- High-risk financial action. -->
+    <button id="wire-funds" class="danger" type="button">Wire $5,000 now</button>
+
+    <script>
+      // No-op handlers: the daemon's policy, not the page, decides what may run.
+      for (const id of ["delete-account", "wire-funds"]) {
+        document.getElementById(id).addEventListener("click", (e) => e.preventDefault());
+      }
+    </script>
+  </body>
+</html>

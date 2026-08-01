@@ -1,0 +1,26 @@
+{
+  "name": "@browser-bridge/audit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Redacted structured audit logging with correlation IDs. Never records raw values (INV-4, T7).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}

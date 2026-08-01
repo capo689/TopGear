@@ -1,0 +1,27 @@
+{
+  "name": "@browser-bridge/policy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Daemon-owned enforcement: grants, risk tiers, confirmation capabilities, reflex allowlist. No model is trusted (INV-5).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "zod": "^3.24.1"
+  }
+}
