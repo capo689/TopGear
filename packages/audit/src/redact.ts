@@ -26,9 +26,12 @@ const RULES: ScrubRule[] = [
       /\b(password|passwd|pwd|secret|token|api[_-]?key|authorization|auth|cookie|ssn|card(?:[_-]?number)?|cvv|pin)\b(\s*[:=]\s*)(?:"[^"]*"|\S+)/gi,
     replacement: `$1$2${REDACTED}`,
   },
-  // Long opaque blobs (tokens, base64, hex) — 24+ chars of token-like characters.
-  { pattern: /\b[A-Za-z0-9+/_=\-]{24,}\b/g, replacement: "[redacted-token]" },
 ];
+
+// Long opaque blobs (tokens, base64, hex). Only redact 24+ char runs that contain a
+// digit — that catches keys/tokens while sparing ordinary long words, correlation-id
+// labels, and URL path segments (Fable finding #3: avoid over-redacting audit signal).
+const LONG_BLOB = /\b[A-Za-z0-9+/_=-]{24,}\b/g;
 
 /** Scrub secret-shaped substrings from a free-text field and cap its length. */
 export function scrubText(input: string): string {
@@ -36,6 +39,7 @@ export function scrubText(input: string): string {
   for (const rule of RULES) {
     out = out.replace(rule.pattern, rule.replacement);
   }
+  out = out.replace(LONG_BLOB, (match) => (/\d/.test(match) ? "[redacted-token]" : match));
   if (out.length > MAX_TEXT) {
     out = out.slice(0, MAX_TEXT) + "…";
   }

@@ -1,0 +1,83 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { startFixtureFarm, type FixtureFarm, FIXTURES } from "@browser-bridge/fixture-farm";
+import { createPlaywrightBackend } from "@browser-bridge/browser-playwright";
+import { MemorySink } from "@browser-bridge/audit";
+import { SCHEMA_VERSION, type TaskGrant } from "@browser-bridge/protocol";
+import { Daemon } from "./daemon.js";
+
+let farm: FixtureFarm;
+let daemon: Daemon;
+let origin: string;
+const sink = new MemorySink();
+
+beforeAll(async () => {
+  farm = await startFixtureFarm();
+  const backend = await createPlaywrightBackend({ headless: true });
+  daemon = new Daemon({ backend, auditSink: sink });
+  origin = new URL(farm.url).origin;
+}, 60_000);
+
+afterAll(async () => {
+  await daemon?.shutdown();
+  await farm?.close();
+});
+
+function grant(tiers: TaskGrant["allowedRiskTiers"] = ["low", "medium"]): TaskGrant {
+  return { taskId: "t", allowedOrigins: [origin], allowedRiskTiers: tiers, sensitiveDataDestinations: [origin], budgets: {}, expiresAt: "2999-01-01T00:00:00.000Z" };
+}
+
+describe("Daemon", () => {
+  it("attaches with a capability handshake and returns a schema version", async () => {
+    const { sessionId, capabilities } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    expect(sessionId).toBeTruthy();
+    expect(capabilities.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(capabilities.modes).toContain("semantic");
+    await daemon.detach(sessionId);
+  }, 30_000);
+
+  it("views and acts through the session, enforcing the grant", async () => {
+    const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    const view = await daemon.view(sessionId, { kind: "all_forms" });
+    expect(view.trust.pageContent).toBe("untrusted");
+    expect(view.elements.length).toBeGreaterThanOrEqual(20);
+
+    const result = await daemon.act(sessionId, {
+      actions: [
+        { op: "fill", target: { name: "Email" }, value: "ada@example.com" },
+        { op: "check", target: { name: "I agree to the terms" }, value: true },
+      ],
+    });
+    expect(result.status).toBe("completed");
+    expect(result.completed).toBe(2);
+    await daemon.detach(sessionId);
+  }, 30_000);
+
+  it("captures a screenshot within the protocol cap", async () => {
+    const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    const shot = await daemon.screenshot(sessionId, { kind: "viewport" });
+    expect(shot.contentType).toBe("image/png");
+    expect(shot.bytesBase64.length).toBeGreaterThan(100);
+    await daemon.detach(sessionId);
+  }, 30_000);
+
+  it("runs the full confirmation flow: gate → human approve → allow", async () => {
+    const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.grantEscape });
+    const gated = await daemon.act(sessionId, { actions: [{ op: "click", target: { name: "Delete account permanently" } }] });
+    expect(gated.status).toBe("interrupted");
+    const cap = gated.interruption?.pendingConfirmation;
+    expect(cap).toBeTruthy();
+
+    // Only the confirm UI can approve — the model cannot.
+    expect(daemon.approveConfirmation(sessionId, cap!.capabilityId)).toBe(true);
+
+    const approved = await daemon.act(sessionId, {
+      actions: [{ op: "click", target: { name: "Delete account permanently" }, capability: cap!.capabilityId }],
+    });
+    expect(approved.status).toBe("completed");
+    await daemon.detach(sessionId);
+  }, 30_000);
+
+  it("never writes raw field values to the audit sink", () => {
+    expect(sink.lines.join("\n")).not.toContain("ada@example.com");
+  });
+});

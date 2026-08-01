@@ -48,6 +48,50 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
-## M1 — Semantic core with enforcement live — NOT STARTED
+## M1 — Semantic core with enforcement live — COMPLETE (pending external review) → R0
 
-Blocked on M0 external review.
+**Release target:** R0 internal dogfood. **Built on:** 2026-08-01. M0 gate: PASS (Fable).
+
+### Acceptance criteria
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| 20-field native form ≤ 3 turns | ✅ VERIFIED (scripted-over-real-stack); ⚠️ live host-CLI pending | `execution/src/execution.e2e.test.ts` "20-field form in ONE batch": **attach + one `act` batch = 2 turns**, all 22 actions verified against real Chromium, values never in audit. **Live `from Claude Code AND Codex` host-CLI runs are the carried watch-item** — Claude Code CLI present; **Codex CLI not installed (a credentials decision, below).** |
+| Dependent-select as one batch with embedded wait | ✅ VERIFIED | `execution.e2e.test.ts` + `browser-playwright/src/backend.test.ts` (real 250ms async enable bridged by a wait). |
+| Injection fixture blocked with a gullible scripted model | ✅ VERIFIED | `execution.e2e.test.ts` "prompt injection is blocked": a model doing exactly what the page says gets the cross-origin submit gated behind confirmation; no navigation to evil. |
+| Confirmation-spoofing impossible (no self-authored / reused / out-of-revision capability) | ✅ VERIFIED | `execution.e2e.test.ts` (daemon-authored summary, approve→allow, replay→blocked; fabricated id rejected) + `policy/src/capability.test.ts` (pending-approval, revision-mismatch, single-use). |
+| Grant-escape fails with teaching errors | ✅ VERIFIED | `execution.e2e.test.ts` (goto to non-granted origin → `grant_denied`) + `policy/src/grant.test.ts` (origin + tier escape). |
+| Beat both baselines ≥ 3× on turns, gates clean | ✅ VERIFIED (honest live number quoted) | The 20-field form runs end-to-end in **2 turns** on the real stack vs screenshot-loop 21 / playwright-mcp 22 (~10×), gates clean (all verified, no unsafe action in the tested fixtures). **2 turns is the quoted honest number**, not the optimistic scripted 10.5× (Fable watch-item 5). |
+
+### What was built
+
+semantic-engine (in-page extractor, hidden-content reading, scoped-staleness) · backend contract · browser-playwright (CDP backend) · locators (scoring, re-resolution, ambiguity) · execution engine (resolve → authorize → act → verify → audit; embedded waits; `if`; confirmation interruptions; navigation detection) · widget-patterns (native + custom combobox) · secrets broker · daemon (session registry, grant binding, capability handshake) · mcp-server (5 tools) · relay (Zod at every hop) · extension (MV3 content script + SW) · shim (dev native host) · inspector-ui (confirm dialog).
+
+### Test tally
+
+**120 tests, all green.** New in M1: semantic-engine 6, browser-playwright 4, locators 6, execution E2E 6, secrets 3, daemon 5, mcp-server 6, relay 5, inspector-ui 2.
+
+### Fable M0 findings — disposition
+
+1. **goto_intent / destination origin** — ✅ addressed: `goto` now checks the *destination* origin against the grant (`grant_denied` on escape). `goto_intent` real resolution remains M3 (returns `widget_unrecognized` for now, honestly).
+2. **Path-traversal test** — ✅ fixed: the fixture-farm test now hard-404s both plain and encoded traversal.
+3. **Audit over-redaction** — ✅ addressed: the long-blob scrubber now only redacts 24+ char runs containing a digit, sparing correlation-id labels and URL path words.
+
+### Known gaps / honest notes (Q9) — carried into R0
+
+1. **Live host-CLI acceptance** (Claude Code + Codex driving the MCP server over stdio against a real browser) is **not in CI** — it needs the MCP registration, an interactive session, and **Codex credentials**. The MCP server is built and handler-tested; the scripted-over-real-stack turn count (2) is verified. This is the watch-item 4 obligation for R0.
+2. **Extension live path** (signed-in Chrome load-unpacked + native-messaging round trip): the relay **validation core is verified** (`relay` tests); the live load is manual. Content-script input is user-action emulation (synthetic events); CDP trusted input is the separately-consented deep-control mode (M2 opt-in).
+3. **Unix-socket daemon listener**: the shim↔daemon socket client is written; the daemon's socket *listener* is not yet wired (the daemon exposes MCP stdio + in-process API, and the CDP backend proves the full execution path today). Small addition, flagged.
+4. **inspector-ui**: the confirm-rendering logic is verified; the full Vite+React shell (sessions/audit/contribution viewer) is minimal — the contribution viewer is M2 anyway.
+
+### Reviewer notes (for Fable)
+
+- Highest scrutiny: `execution/src/session.ts` (the integrator: authorize on *every* action, read-back verification, confirmation interruption + navigation detection) and the extension trust boundary (`relay/src/validate.ts`).
+- Risk classifier was refined this milestone: a same-origin "Submit" is **medium**, not high (it was over-escalating every form). High is financial/destructive/publish-send or third-party submit. Confirm this reads correctly.
+- The confirmation flow now has an explicit human-approval gate (`mintPending` → `approve` → `consume`); confirm the model cannot approve its own capability by any path.
+
+---
+
+## M2 — Widgets, fill_record, collection — NOT STARTED
+
+Blocked on M1 external review. First item at the boundary: the **Codex credentials decision** for the live "OpenAI-based agent" acceptance.

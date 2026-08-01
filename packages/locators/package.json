@@ -1,0 +1,27 @@
+{
+  "name": "@browser-bridge/locators",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Locator fingerprint scoring, execution-time re-resolution, and ambiguity arbitration (plan §4.3).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/semantic-engine": "workspace:*"
+  }
+}

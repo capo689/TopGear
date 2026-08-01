@@ -1,0 +1,30 @@
+{
+  "name": "@browser-bridge/semantic-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DOM + a11y + layout → compact SemanticViews; hidden-content reading; scoped-staleness diffing (plan §5).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@browser-bridge/fixture-farm": "workspace:*",
+    "playwright": "^1.49.1"
+  }
+}

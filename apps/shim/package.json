@@ -1,0 +1,20 @@
+{
+  "name": "@browser-bridge/shim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev-mode native-messaging host: relays validated messages between the extension and the daemon socket.",
+  "license": "Apache-2.0",
+  "bin": {
+    "browser-bridge-shim": "./dist/shim.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/relay": "workspace:*"
+  }
+}

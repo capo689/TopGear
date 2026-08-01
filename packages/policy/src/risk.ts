@@ -40,30 +40,29 @@ export interface RiskAssessment {
   reasons: string[];
 }
 
-/** Label tokens that indicate a committing / high-consequence action. */
+/**
+ * Label tokens that indicate a genuinely high-consequence action. Deliberately NOT
+ * "submit"/"save"/"continue"/"confirm" — those are ordinary form controls and would
+ * over-gate every same-origin form. High intent is financial, destructive, or
+ * publish/send. Third-party submits are caught separately by button semantics.
+ */
 const HIGH_INTENT_TOKENS = new Set([
-  "submit",
-  "send",
-  "publish",
-  "post",
   "buy",
   "purchase",
   "pay",
   "checkout",
   "order",
-  "place",
   "delete",
   "remove",
   "destroy",
   "transfer",
   "wire",
-  "confirm",
-  "agree",
-  "accept",
-  "sign",
-  "authorize",
-  "subscribe",
+  "withdraw",
+  "deposit",
+  "publish",
+  "send",
   "donate",
+  "authorize",
 ]);
 
 function tokensHitHighIntent(tokens: readonly string[] | undefined): boolean {

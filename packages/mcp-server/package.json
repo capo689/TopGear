@@ -1,0 +1,34 @@
+{
+  "name": "@browser-bridge/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP surface for the bridge: the 5 M1 tools (attach/view/act/screenshot/confirm) over the daemon.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "browser-bridge-mcp": "./dist/bin.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/daemon": "workspace:*",
+    "@browser-bridge/backend": "workspace:*",
+    "@browser-bridge/browser-playwright": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.1"
+  }
+}

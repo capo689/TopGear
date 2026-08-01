@@ -1,0 +1,27 @@
+{
+  "name": "@browser-bridge/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The BrowserBackend contract the execution engine drives. Implemented by CDP/Playwright and the extension relay.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/semantic-engine": "workspace:*"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Bridge",
+  "version": "0.1.0",
+  "description": "Operate this browser at machine speed via the local Browser Bridge daemon.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "nativeMessaging"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Grant Operate on this tab"
+  }
+}

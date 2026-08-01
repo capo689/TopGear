@@ -1,0 +1,31 @@
+{
+  "name": "@browser-bridge/widget-patterns",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Widget detectors + playbooks collapsing multi-turn rituals to one op (plan §6). M1: native + custom-combobox.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/backend": "workspace:*",
+    "@browser-bridge/semantic-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@browser-bridge/browser-playwright": "workspace:*",
+    "@browser-bridge/fixture-farm": "workspace:*"
+  }
+}

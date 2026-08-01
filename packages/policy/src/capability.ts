@@ -20,6 +20,7 @@ export interface ConsumeContext {
 
 export type ConsumeFailureReason =
   | "unknown"
+  | "not_approved"
   | "already_consumed"
   | "expired"
   | "origin_mismatch"
@@ -31,6 +32,7 @@ export type ConsumeResult =
 
 interface StoredCap {
   capability: ConfirmationCapability;
+  approved: boolean;
   consumed: boolean;
   expiresAtMs: number;
 }
@@ -49,7 +51,28 @@ export class CapabilityStore {
     private readonly nonce: NonceSource = cryptoNonce,
   ) {}
 
+  /** Mint an already-approved capability (the daemon does this post-approval). */
   mint(params: MintParams): ConfirmationCapability {
+    return this.create(params, true);
+  }
+
+  /**
+   * Mint a PENDING capability from a blocked action. It cannot be consumed until a human
+   * approves it in the confirm UI (`approve`). The model never authors it (INV-9).
+   */
+  mintPending(params: MintParams): ConfirmationCapability {
+    return this.create(params, false);
+  }
+
+  /** Human approval from the confirm UI turns a pending capability consumable. */
+  approve(capabilityId: string): boolean {
+    const entry = this.store.get(capabilityId);
+    if (!entry || entry.consumed || this.clock.now() > entry.expiresAtMs) return false;
+    entry.approved = true;
+    return true;
+  }
+
+  private create(params: MintParams, approved: boolean): ConfirmationCapability {
     const capabilityId = this.nonce.next();
     const expiresAtMs = this.clock.now() + params.ttlMs;
     const capability: ConfirmationCapability = {
@@ -60,7 +83,7 @@ export class CapabilityStore {
       sensitiveFields: params.sensitiveFields,
       expiresAt: new Date(expiresAtMs).toISOString(),
     };
-    this.store.set(capabilityId, { capability, consumed: false, expiresAtMs });
+    this.store.set(capabilityId, { capability, approved, consumed: false, expiresAtMs });
     return capability;
   }
 
@@ -68,6 +91,7 @@ export class CapabilityStore {
     const entry = this.store.get(capabilityId);
     if (!entry) return { ok: false, reason: "unknown" };
     if (entry.consumed) return { ok: false, reason: "already_consumed" };
+    if (!entry.approved) return { ok: false, reason: "not_approved" };
     if (this.clock.now() > entry.expiresAtMs) return { ok: false, reason: "expired" };
     if (entry.capability.origin !== ctx.origin) return { ok: false, reason: "origin_mismatch" };
     if (entry.capability.pageRevision !== ctx.pageRevision) return { ok: false, reason: "revision_mismatch" };

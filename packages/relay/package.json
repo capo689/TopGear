@@ -1,0 +1,26 @@
+{
+  "name": "@browser-bridge/relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The extension relay contract: Zod schemas + per-hop validation. Content scripts are less trusted than the service worker (T5).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}

@@ -76,4 +76,16 @@ describe("CapabilityStore", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe("unknown");
   });
+
+  it("will not consume a pending capability until a human approves it (INV-9)", () => {
+    const s = store();
+    const cap = s.mintPending(mintArgs);
+    const before = s.consume(cap.capabilityId, { origin: "https://example.com", pageRevision: 7 });
+    expect(before.ok).toBe(false);
+    if (!before.ok) expect(before.reason).toBe("not_approved");
+
+    expect(s.approve(cap.capabilityId)).toBe(true);
+    const after = s.consume(cap.capabilityId, { origin: "https://example.com", pageRevision: 7 });
+    expect(after.ok).toBe(true);
+  });
 });

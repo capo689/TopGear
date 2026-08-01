@@ -42,15 +42,12 @@ describe("fixture farm server", () => {
     expect(html).toContain("INV-2");
   });
 
-  it("404s a path-traversal attempt", async () => {
-    const res = await fetch(farm.url + "/../../package.json");
-    // fetch normalizes some traversal, so also probe an encoded variant.
+  it("hard-404s a path-traversal attempt and never serves a file outside public/", async () => {
+    // fetch() normalizes "/../.." client-side, so also probe an encoded variant that
+    // reaches the server verbatim. Both MUST 404 — a 200 here would mean escape.
+    const plain = await fetch(farm.url + "/../../package.json");
     const encoded = await fetch(farm.url + "/%2e%2e/%2e%2e/package.json");
-    expect([res.status, encoded.status].every((s) => s === 404 || s === 200)).toBe(true);
-    // The encoded traversal specifically must not escape the public dir.
-    if (encoded.status === 200) {
-      const body = await encoded.text();
-      expect(body).not.toContain("\"@browser-bridge/fixture-farm\"");
-    }
+    expect(plain.status).toBe(404);
+    expect(encoded.status).toBe(404);
   });
 });

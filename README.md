@@ -14,12 +14,25 @@ locally, and consults the model only for decisions that require intelligence.
 
 ```
 packages/
-  protocol/   Single source of truth: all cross-boundary types + Zod schemas
-  policy/     Daemon-owned enforcement: grants, risk tiers, confirmation capabilities
-  audit/      Redacted structured logging with correlation IDs
-  evals/      Scorecard metrics, standard workflows, scripted-agent baselines
+  protocol/          Single source of truth: all cross-boundary types + Zod schemas
+  policy/            Enforcement: grants, risk tiers, confirmation capabilities, reflexes
+  audit/             Redacted structured logging with correlation IDs
+  secrets/           SecretRef broker (values never reach model context)
+  semantic-engine/   DOM+a11y+layout → compact SemanticViews; hidden-content; staleness
+  backend/           The BrowserBackend contract the execution engine drives
+  browser-playwright/ CDP/Playwright backend implementation
+  locators/          Fingerprint scoring, re-resolution, ambiguity arbitration
+  widget-patterns/   Widget playbooks (native + custom combobox)
+  execution/         Batch engine: resolve → authorize → act → verify → audit
+  daemon/            Session registry + gateway; binds grants, capability handshake
+  mcp-server/        MCP surface: the 5 M1 tools over the daemon
+  relay/             Extension relay contract; Zod-validated at every hop
+  evals/             Scorecard metrics, standard workflows, scripted-agent baselines
 apps/
-  fixture-farm/  Self-hosted gauntlet site the tests drive
+  fixture-farm/      Self-hosted gauntlet site the tests drive
+  extension/         MV3 content script + service-worker relay
+  shim/              Dev native-messaging host
+  inspector-ui/      Confirm dialog (renders the daemon's words, not the model's)
 ```
 
 ## Develop

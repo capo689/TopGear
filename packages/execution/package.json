@@ -1,0 +1,37 @@
+{
+  "name": "@browser-bridge/execution",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Batch execution: resolve, authorize, act, verify, audit. Sequential with embedded waits, if, interruptions (plan §7).",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/policy": "workspace:*",
+    "@browser-bridge/audit": "workspace:*",
+    "@browser-bridge/semantic-engine": "workspace:*",
+    "@browser-bridge/locators": "workspace:*",
+    "@browser-bridge/backend": "workspace:*",
+    "@browser-bridge/widget-patterns": "workspace:*",
+    "@browser-bridge/secrets": "workspace:*"
+  },
+  "devDependencies": {
+    "@browser-bridge/browser-playwright": "workspace:*",
+    "@browser-bridge/fixture-farm": "workspace:*"
+  }
+}

@@ -82,10 +82,12 @@ describe("authorize — grant gating", () => {
 
 describe("authorize — high-risk confirmation flow (INV-9)", () => {
   const submit: Action = { op: "click", target: { name: "Submit application" } };
+  // High risk here comes from a THIRD-PARTY submit (form posts cross-origin), not the
+  // word "submit" — a same-origin submit is only medium (see risk.test.ts).
   const highCtx: ActionExecContext = {
     ...baseCtx,
-    risk: { click: { origin: "https://example.com", buttonSemantics: "submit", labelTokens: ["submit", "application"] } },
-    normalize: { origin: "https://example.com", targetLabel: "Submit application", formAction: "https://example.com/apply" },
+    risk: { click: { origin: "https://example.com", buttonSemantics: "submit", sameOriginForm: false } },
+    normalize: { origin: "https://example.com", targetLabel: "Submit application", formAction: "https://third-party.example/collect" },
   };
 
   it("requires confirmation and returns a daemon-authored normalized action", () => {

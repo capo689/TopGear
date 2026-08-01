@@ -64,3 +64,26 @@ section first. Dates are absolute.
 - **Risk classifier is v0** (conservative escalation on high-intent labels,
   third-party submits, and cross-origin POSTs carrying sensitive values). The full
   all-clicks classifier + network backstop is M5.
+
+### M1 build choices (2026-08-01)
+- **Backend abstraction:** the execution engine drives a `BrowserBackend` interface
+  (`packages/backend`). M1 ships the CDP/Playwright implementation as both the isolated
+  and attach backend; the extension relay is the second implementation. This let M1's
+  acceptance be verified end-to-end in CI against real Chromium.
+- **Element identity:** the extractor stamps a `data-bb-ref` attribute so primitives can
+  target elements by ref; identity for re-resolution is the scored fingerprint (refs are
+  caches). The attribute is a small, contained DOM mutation within the automation
+  contract.
+- **Human-approval gate on confirmations:** `CapabilityStore.mintPending` +
+  `approve` + `consume`. A high-risk action mints a PENDING capability (daemon-authored);
+  only the confirm UI can `approve`; the model re-issues with the id after approval.
+  Preserves INV-9 (model cannot self-authorize) and is testable.
+- **Risk classifier refinement:** "submit"/"save"/"continue"/"confirm" removed from the
+  high-intent token set — a same-origin submit is medium, not high (it was over-gating
+  every form). High = financial/destructive/publish-send, or a third-party submit.
+- **Content-script input path:** user-action emulation (synthetic events) for M1;
+  CDP trusted input is the separately-consented deep-control mode (M2 opt-in).
+- **inspector-ui:** Vite + React per Q7. M1 implements the confirm dialog (the security
+  surface); the full inspector shell is later.
+- **Fable M0 findings folded:** goto destination-origin check (#1), hard-404 traversal
+  test (#2), digit-gated blob scrubber (#3).
