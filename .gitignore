@@ -22,3 +22,6 @@ test-results/
 # os / editor
 .DS_Store
 *.log
+
+# transient review bundles (regenerable; never belong in the repo)
+*.tar.gz
