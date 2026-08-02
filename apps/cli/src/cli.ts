@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { homedir, platform as osPlatform } from "node:os";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { connect } from "node:net";
 import { runDoctorChecks, renderDoctor, summarize, type DoctorEnv } from "./doctor.js";
+
+const here = dirname(fileURLToPath(import.meta.url)); // apps/cli/dist
+const repoRoot = resolve(here, "..", "..", "..");
 
 function chromiumPresent(): boolean {
   const candidates = [
@@ -14,12 +18,25 @@ function chromiumPresent(): boolean {
   return candidates.some((p) => existsSync(p));
 }
 
+function extensionBuilt(): boolean {
+  return existsSync(join(repoRoot, "apps", "extension", "dist", "manifest.json"));
+}
+
+function nativeHostRegistered(): boolean {
+  const dirs: Record<string, string> = {
+    darwin: join(homedir(), "Library", "Application Support", "Google", "Chrome", "NativeMessagingHosts"),
+    linux: join(homedir(), ".config", "google-chrome", "NativeMessagingHosts"),
+  };
+  const dir = dirs[osPlatform()];
+  return dir ? existsSync(join(dir, "com.browser_bridge.shim.json")) : false;
+}
+
 function socketReachable(path: string): Promise<boolean> {
-  return new Promise((resolve) => {
+  return new Promise((res) => {
     const sock = connect(path);
     const done = (v: boolean) => {
       sock.destroy();
-      resolve(v);
+      res(v);
     };
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
@@ -34,6 +51,8 @@ async function doctor(): Promise<void> {
     platform: process.platform,
     hasChromium: chromiumPresent(),
     socketReachable: await socketReachable(socketPath),
+    extensionBuilt: extensionBuilt(),
+    nativeHostRegistered: nativeHostRegistered(),
   };
   const checks = runDoctorChecks(env);
   process.stdout.write(renderDoctor(checks) + "\n");

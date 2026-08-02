@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { runDoctorChecks, summarize, renderDoctor, type DoctorEnv } from "./doctor.js";
 
-const base: DoctorEnv = { nodeVersion: "v24.14.1", platform: "darwin", hasChromium: true, socketReachable: true };
+const base: DoctorEnv = {
+  nodeVersion: "v24.14.1",
+  platform: "darwin",
+  hasChromium: true,
+  socketReachable: true,
+  extensionBuilt: true,
+  nativeHostRegistered: true,
+};
 
 describe("runDoctorChecks", () => {
   it("passes a healthy environment", () => {
@@ -21,6 +28,13 @@ describe("runDoctorChecks", () => {
     const checks = runDoctorChecks({ ...base, socketReachable: false });
     expect(summarize(checks).ok).toBe(true);
     expect(checks.find((c) => c.name === "daemon")?.status).toBe("warn");
+  });
+
+  it("WARNS (not fails) when the extension bundle or native host is missing", () => {
+    const checks = runDoctorChecks({ ...base, extensionBuilt: false, nativeHostRegistered: false });
+    expect(summarize(checks).ok).toBe(true);
+    expect(checks.find((c) => c.name === "extension")?.status).toBe("warn");
+    expect(checks.find((c) => c.name === "native-host")?.status).toBe("warn");
   });
 
   it("renders a readable report", () => {

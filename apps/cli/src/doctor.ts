@@ -8,6 +8,10 @@ export interface DoctorEnv {
   platform: string; // process.platform
   hasChromium: boolean;
   socketReachable: boolean;
+  /** Extension bundled to apps/extension/dist (load-unpacked ready). */
+  extensionBuilt: boolean;
+  /** Native-messaging host manifest registered with Chrome. */
+  nativeHostRegistered: boolean;
 }
 
 export type CheckStatus = "ok" | "warn" | "fail";
@@ -48,6 +52,20 @@ export function runDoctorChecks(env: DoctorEnv): DoctorCheck[] {
     name: "daemon",
     status: env.socketReachable ? "ok" : "warn",
     detail: env.socketReachable ? "daemon socket reachable" : "daemon not running (start it before attaching)",
+  });
+
+  checks.push({
+    name: "extension",
+    status: env.extensionBuilt ? "ok" : "warn",
+    detail: env.extensionBuilt ? "bundled → apps/extension/dist" : "run: pnpm --filter @browser-bridge/extension build",
+  });
+
+  checks.push({
+    name: "native-host",
+    status: env.nativeHostRegistered ? "ok" : "warn",
+    detail: env.nativeHostRegistered
+      ? "com.browser_bridge.shim registered"
+      : "run: node apps/shim/bin/register-native-host.mjs <EXTENSION_ID>",
   });
 
   return checks;

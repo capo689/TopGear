@@ -38,10 +38,39 @@ async function run(cmd: RelayCommand): Promise<RelayResult> {
       fire(el, "change");
       return ok();
     }
+    case "setChecked": {
+      const el = q(String(args.ref)) as HTMLInputElement | null;
+      if (!el) return fail("not_found");
+      el.checked = Boolean(args.checked);
+      fire(el, "input");
+      fire(el, "change");
+      return ok();
+    }
+    case "selectOption": {
+      const el = q(String(args.ref)) as HTMLSelectElement | null;
+      if (!el) return fail("not_found");
+      const values = (args.values as string[]) ?? [];
+      for (const opt of Array.from(el.options)) opt.selected = values.includes(opt.value) || values.includes(opt.label);
+      fire(el, "input");
+      fire(el, "change");
+      return ok();
+    }
     case "click": {
       const el = q(String(args.ref));
       if (!el) return fail("not_found");
       el.click();
+      return ok();
+    }
+    case "press": {
+      const el = args.ref ? q(String(args.ref)) : document.activeElement;
+      const key = String(args.key);
+      (el ?? document).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      (el ?? document).dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+      return ok();
+    }
+    case "scroll": {
+      const amount = Number(args.amount ?? 400) * (args.direction === "up" ? -1 : 1);
+      window.scrollBy(0, amount);
       return ok();
     }
     case "url":

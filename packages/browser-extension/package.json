@@ -1,9 +1,9 @@
 {
-  "name": "@browser-bridge/mcp-server",
+  "name": "@browser-bridge/browser-extension",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP surface for the bridge: the 5 M1 tools (attach/view/act/screenshot/confirm) over the daemon.",
+  "description": "The extension-relay BrowserBackend: drives the signed-in profile via the daemon socket → shim → SW → content script.",
   "license": "Apache-2.0",
   "exports": {
     ".": {
@@ -13,9 +13,6 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "browser-bridge-mcp": "./dist/bin.js"
-  },
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -24,12 +21,13 @@
     "clean": "rimraf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@browser-bridge/protocol": "workspace:*",
-    "@browser-bridge/daemon": "workspace:*",
     "@browser-bridge/backend": "workspace:*",
+    "@browser-bridge/protocol": "workspace:*",
+    "@browser-bridge/semantic-engine": "workspace:*",
+    "@browser-bridge/relay": "workspace:*"
+  },
+  "devDependencies": {
     "@browser-bridge/browser-playwright": "workspace:*",
-    "@browser-bridge/browser-extension": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.12.0",
-    "zod": "^3.24.1"
+    "@browser-bridge/fixture-farm": "workspace:*"
   }
 }

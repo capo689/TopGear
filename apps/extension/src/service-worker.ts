@@ -27,6 +27,11 @@ function connect(): void {
 }
 
 async function onNativeMessage(raw: unknown): Promise<void> {
+  // Adopt the daemon's per-session nonce from its first command. The native port is only
+  // reachable by the daemon (via the signed shim), so this binds SW↔daemon for the
+  // session; the page can never originate a native-port command.
+  const maybe = raw as { nonce?: string };
+  if (!operateNonce && typeof maybe?.nonce === "string") operateNonce = maybe.nonce;
   const accepted = serviceWorkerAcceptsCommand("native-port", raw, operateNonce);
   if (!accepted.ok) {
     nativePort?.postMessage({ kind: "result", correlationId: "unknown", ok: false, error: accepted.error });
@@ -48,7 +53,7 @@ async function onNativeMessage(raw: unknown): Promise<void> {
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id === undefined) return;
   operateTabId = tab.id;
-  operateNonce = crypto.randomUUID();
+  // The session nonce is adopted from the daemon's first command (see onNativeMessage).
   void chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content-script.js"] });
   connect();
 });

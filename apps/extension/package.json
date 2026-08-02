@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "MV3 extension: content script + service worker relay. Zod-validated at every hop.",
+  "description": "MV3 extension: content script + service-worker relay. Zod-validated at every hop.",
   "license": "Apache-2.0",
   "scripts": {
+    "build": "node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rimraf dist *.tsbuildinfo"
   },
   "dependencies": {
     "@browser-bridge/relay": "workspace:*",
     "@browser-bridge/semantic-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
   }
 }
