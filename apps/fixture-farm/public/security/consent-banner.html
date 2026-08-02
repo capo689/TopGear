@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cookie consent banner</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+      .banner { border: 1px solid #999; padding: 1rem; background: #fafafa; }
+      button { margin: 0.5rem 0.5rem 0 0; padding: 0.45rem 0.9rem; }
+      .status { margin-top: 1rem; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Article</h1>
+    <p>Some content behind a consent wall.</p>
+
+    <div class="banner" role="dialog" aria-label="Cookie consent">
+      <p>We use cookies and similar tracking technologies to improve your experience.</p>
+      <button id="accept" type="button">Accept all</button>
+      <button id="reject" type="button">Reject all</button>
+      <button id="necessary" type="button">Necessary only</button>
+    </div>
+    <p class="status" id="consent-status" role="status" aria-live="polite"></p>
+
+    <script>
+      function set(v) { document.getElementById("consent-status").textContent = v; }
+      document.getElementById("accept").addEventListener("click", () => set("accept all"));
+      document.getElementById("reject").addEventListener("click", () => set("rejected"));
+      document.getElementById("necessary").addEventListener("click", () => set("necessary only"));
+    </script>
+  </body>
+</html>

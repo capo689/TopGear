@@ -1,7 +1,7 @@
 import type { AttachResult } from "@browser-bridge/daemon";
-import type { SemanticView, BatchResult, ViewScope, ActionBatch } from "@browser-bridge/protocol";
+import type { SemanticView, BatchResult, ViewScope, ActionBatch, FillRecordRequest, FillRecordResult } from "@browser-bridge/protocol";
 import type { ScreenshotResult, ScreenshotRoi } from "@browser-bridge/backend";
-import type { AttachInput, ViewInput, ActInput, ScreenshotInput } from "./schemas.js";
+import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput } from "./schemas.js";
 
 /**
  * The subset of the daemon the MCP tools need. Kept structural so handlers can be
@@ -11,6 +11,7 @@ export interface DaemonLike {
   attach(req: { grant: AttachInput["grant"]; url?: string }): Promise<AttachResult>;
   view(sessionId: string, scope: ViewScope): Promise<SemanticView>;
   act(sessionId: string, batch: ActionBatch): Promise<BatchResult>;
+  fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult>;
   screenshot(sessionId: string, roi: ScreenshotRoi): Promise<ScreenshotResult>;
 }
 
@@ -24,6 +25,13 @@ export function handleView(daemon: DaemonLike, input: ViewInput): Promise<Semant
 
 export function handleAct(daemon: DaemonLike, input: ActInput): Promise<BatchResult> {
   return daemon.act(input.sessionId, input.batch);
+}
+
+export function handleFillRecord(daemon: DaemonLike, input: FillRecordInput): Promise<FillRecordResult> {
+  return daemon.fillRecord(
+    input.sessionId,
+    input.ambiguityPolicy === undefined ? { record: input.record } : { record: input.record, ambiguityPolicy: input.ambiguityPolicy },
+  );
 }
 
 export function handleScreenshot(daemon: DaemonLike, input: ScreenshotInput): Promise<ScreenshotResult> {

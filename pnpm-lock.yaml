@@ -27,6 +27,14 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)
 
+  apps/cli: {}
+
+  apps/commons-ingest:
+    dependencies:
+      '@browser-bridge/contribution':
+        specifier: workspace:*
+        version: link:../../packages/contribution
+
   apps/extension:
     dependencies:
       '@browser-bridge/relay':
@@ -99,6 +107,8 @@ importers:
       '@browser-bridge/fixture-farm':
         specifier: workspace:*
         version: link:../../apps/fixture-farm
+
+  packages/contribution: {}
 
   packages/daemon:
     dependencies:
@@ -229,6 +239,8 @@ importers:
       playwright:
         specifier: ^1.49.1
         version: 1.62.1
+
+  packages/site-memory: {}
 
   packages/widget-patterns:
     dependencies:

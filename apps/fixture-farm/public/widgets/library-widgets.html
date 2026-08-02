@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Library widgets gauntlet</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+      .combo { position: relative; width: 18rem; margin: 0.75rem 0; }
+      .trigger { width: 100%; text-align: left; padding: 0.5rem; border: 1px solid #999; background: #fff; }
+      .trigger[aria-disabled="true"] { background: #eee; color: #999; }
+      ul[role="listbox"] { position: absolute; left: 0; right: 0; margin: 0; padding: 0; list-style: none; border: 1px solid #999; background: #fff; max-height: 12rem; overflow: auto; z-index: 2; }
+      ul[hidden] { display: none; }
+      li[role="option"] { padding: 0.35rem 0.5rem; cursor: pointer; }
+      li[aria-selected="true"] { background: #e5efff; }
+      label { display: block; font-weight: 600; margin-top: 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Library widgets gauntlet</h1>
+    <p>Each is an ARIA combobox/listbox carrying a different library's DOM signature. The
+      shared select primitive drives them identically (the positioning claim).</p>
+
+    <div class="react-select__control combo" id="c-react"><label id="l-react">Framework</label>
+      <button class="trigger" id="t-react" role="combobox" aria-expanded="false" aria-controls="lb-react" aria-labelledby="l-react">Select…</button>
+      <ul class="react-select__menu" id="lb-react" role="listbox" hidden></ul>
+      <input type="hidden" id="v-react" /></div>
+
+    <div class="combo" data-radix-select id="c-radix"><label id="l-radix">Region</label>
+      <button class="trigger" id="t-radix" role="combobox" aria-expanded="false" aria-controls="lb-radix" aria-labelledby="l-radix" data-radix-trigger>Select…</button>
+      <ul id="lb-radix" role="listbox" hidden></ul>
+      <input type="hidden" id="v-radix" /></div>
+
+    <div class="MuiSelect-root combo" id="c-mui"><label id="l-mui">Tier</label>
+      <button class="trigger MuiSelect-select" id="t-mui" role="combobox" aria-expanded="false" aria-controls="lb-mui" aria-labelledby="l-mui">Select…</button>
+      <ul id="lb-mui" role="listbox" hidden></ul>
+      <input type="hidden" id="v-mui" /></div>
+
+    <div class="ant-select combo" id="c-ant"><label id="l-ant">Plan</label>
+      <button class="trigger ant-select-selector" id="t-ant" role="combobox" aria-expanded="false" aria-controls="lb-ant" aria-labelledby="l-ant">Select…</button>
+      <ul id="lb-ant" role="listbox" hidden></ul>
+      <input type="hidden" id="v-ant" /></div>
+
+    <div class="combo" id="c-disabled"><label id="l-disabled">Locked</label>
+      <button class="trigger" id="t-disabled" role="combobox" aria-expanded="false" aria-controls="lb-disabled" aria-labelledby="l-disabled" aria-disabled="true" disabled>Unavailable</button>
+      <ul id="lb-disabled" role="listbox" hidden></ul></div>
+
+    <div class="combo" id="c-async"><label id="l-async">Async city</label>
+      <button class="trigger" id="t-async" role="combobox" aria-expanded="false" aria-controls="lb-async" aria-labelledby="l-async">Select…</button>
+      <ul id="lb-async" role="listbox" hidden></ul>
+      <input type="hidden" id="v-async" /></div>
+
+    <div class="combo" id="c-rerender"><label id="l-rerender">Rerender color</label>
+      <button class="trigger" id="t-rerender" role="combobox" aria-expanded="false" aria-controls="lb-rerender" aria-labelledby="l-rerender">Select…</button>
+      <ul id="lb-rerender" role="listbox" hidden></ul>
+      <input type="hidden" id="v-rerender" /></div>
+
+    <div class="combo" id="c-type"><label id="l-type">Typeahead country</label>
+      <input class="trigger" id="t-type" role="combobox" aria-expanded="false" aria-controls="lb-type" aria-labelledby="l-type" aria-autocomplete="list" autocomplete="off" placeholder="Type…" />
+      <ul id="lb-type" role="listbox" hidden></ul>
+      <input type="hidden" id="v-type" /></div>
+
+    <script>
+      function optionsHtml(items, selected) {
+        return items.map((t) => `<li role="option" data-value="${t}" aria-selected="${t === selected ? "true" : "false"}">${t}</li>`).join("");
+      }
+      function makeCombo(id, items, opts = {}) {
+        const trigger = document.getElementById("t-" + id);
+        const list = document.getElementById("lb-" + id);
+        const hidden = document.getElementById("v-" + id);
+        function render(sel) { list.innerHTML = optionsHtml(items, sel); }
+        function open() {
+          if (trigger.getAttribute("aria-disabled") === "true") return;
+          trigger.setAttribute("aria-expanded", "true");
+          if (opts.async) { list.innerHTML = "<li role='option' aria-disabled='true'>Loading…</li>"; setTimeout(() => render(hidden && hidden.value), 200); }
+          else render(hidden && hidden.value);
+          list.hidden = false;
+        }
+        function close() { trigger.setAttribute("aria-expanded", "false"); list.hidden = true; }
+        function choose(value) {
+          if (opts.rerender) render(value); // replace nodes (mid-interaction rerender)
+          list.querySelectorAll('[role="option"]').forEach((o) => o.setAttribute("aria-selected", String(o.dataset.value === value)));
+          if (hidden) hidden.value = value;
+          trigger.tagName === "INPUT" ? (trigger.value = value) : (trigger.textContent = value);
+          close();
+        }
+        trigger.addEventListener("click", () => (list.hidden ? open() : close()));
+        list.addEventListener("click", (e) => { const li = e.target.closest('[role="option"]'); if (li && li.dataset.value) choose(li.dataset.value); });
+        if (opts.typeahead) {
+          trigger.addEventListener("input", () => {
+            const q = trigger.value.toLowerCase();
+            list.hidden = false; trigger.setAttribute("aria-expanded", "true");
+            list.innerHTML = optionsHtml(items.filter((t) => t.toLowerCase().includes(q)), null);
+          });
+        }
+      }
+      makeCombo("react", ["React", "Vue", "Svelte", "Solid"]);
+      makeCombo("radix", ["North", "South", "East", "West"]);
+      makeCombo("mui", ["Free", "Pro", "Enterprise"]);
+      makeCombo("ant", ["Basic", "Standard", "Premium"]);
+      makeCombo("async", ["Bend", "Portland", "Seattle"], { async: true });
+      makeCombo("rerender", ["Red", "Green", "Blue"], { rerender: true });
+      makeCombo("type", ["United States", "United Kingdom", "Canada", "Australia"], { typeahead: true });
+    </script>
+  </body>
+</html>

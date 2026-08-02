@@ -1,0 +1,26 @@
+{
+  "name": "@browser-bridge/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "browser-bridge CLI: install, doctor, inspector launch.",
+  "license": "Apache-2.0",
+  "bin": {
+    "browser-bridge": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  }
+}

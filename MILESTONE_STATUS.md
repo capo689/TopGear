@@ -92,6 +92,61 @@ semantic-engine (in-page extractor, hidden-content reading, scoped-staleness) ·
 
 ---
 
-## M2 — Widgets, fill_record, collection — NOT STARTED
+## M2 — Widgets, fill_record, collection — COMPLETE (pending external review) → R1
 
-Blocked on M1 external review. First item at the boundary: the **Codex credentials decision** for the live "OpenAI-based agent" acceptance.
+**Release target:** R1 first external users. **Built on:** 2026-08-01. M1 gate: PASS (Fable).
+
+### Acceptance criteria
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Every WidgetKind passes its gauntlet incl. rerender | ✅ VERIFIED (see honest note) | `widget-patterns/src/gauntlet.test.ts`: react-select / Radix / MUI / Ant driven by ONE shared playbook; disabled refused, async options waited out, **mid-interaction rerender survived**, option_not_found teaches, typeahead via `search_pick`. |
+| fill_record: 0 mid-form turns + ambiguity surfacing | ✅ VERIFIED | `execution/src/fill-record.test.ts` (matcher: camelCase, autocomplete, boolean→checkbox, ambiguity band) + `execution.e2e.test.ts` (record → ≥9 fields matched, ONE verified batch, no values in audit). |
+| Consent banner — "Accept all" never auto-clicked | ✅ VERIFIED | `execution.e2e.test.ts`: reflex chooses necessary-only/reject; a surface-configured variant clicks nothing; Accept-all effect never fires. |
+| Classification audit — 100 records, zero Class A/B leakage | ✅ VERIFIED | `contribution/src/audit.test.ts`: 100 mixed public/intranet/authenticated/value-bearing records; **0 leaks**; contributed records carry no values, no query strings, day-granular timestamps; human-readable report. |
+| Kill switch verified end-to-end | ✅ VERIFIED | `contribution/src/pipeline.test.ts` + `commons-ingest/src/server.test.ts`: consent off + local purge + remote purge, quarantine emptied. |
+| INV-10 release checklist | ✅ against the stub | See checklist below. Real Vercel ingest is required for an ACTUAL external ship (credential item). |
+
+### INV-10 collection-gate checklist
+
+- [x] Class C contribution pipeline live (classify → anonymize → sign → ingest) — verified against `commons-ingest` local stub (identical interface to Vercel).
+- [x] Product telemetry, structural + aggregated (`telemetry.ts`).
+- [x] Consent UX: disclosed default-on disclosure (`disclosure.ts`) + instant, retroactive kill switch.
+- [x] Contribution viewer: every sent record inspectable, every discard logged with its class + reason.
+- [x] Classification enforced by architecture, not promise (100-record audit, 0 A/B leakage).
+- [ ] **Real Vercel ingest endpoint** — required before an actual external R1 ship (credential item, below).
+
+### Fable M1 findings — disposition
+
+1. **click/expand/set_date verification** — ✅ `set_date` compares the read-back value; `expand` verifies the expander persists; `click` does a real post-action state/nav check. Bonus: fixed a real backend bug — `click` now refuses a disabled element instead of timing out.
+2. **Two M5-inherited fixtures** — ✅ `bland-destructive` and `fetch-exfil` added as `it.fails` (documented expected-fail until M5, not forced green).
+3. **CI Playwright install** — ✅ `pnpm exec playwright install --with-deps chromium` added before the test step.
+
+### Bug found + fixed this milestone (the gauntlet earned its keep)
+
+**Ref collision across captures.** The extractor reset its ref counter to 0 per capture, so a newly-appearing option could reuse a ref already held by a different element in a prior capture (`combo-e2` → two nodes), sending actions to the wrong, hidden element. Fixed with a page-persistent, globally-unique ref sequence.
+
+### Test tally
+
+**162 tests, all green.** New in M2: contribution 14, commons-ingest 2, site-memory 6, cli 4, widget gauntlet 4, fill-record unit 6, plus execution E2E (fill_record + consent) and daemon/mcp fill_record wiring.
+
+### Known gaps / honest notes (Q9) — carried into R1
+
+1. **Real Vercel ingest** is needed before an actual external ship (INV-10). The client pipeline is complete and verified against a stub with the identical interface; swapping in Vercel is ~a day (credential item).
+2. **Live host-CLI acceptance (Codex)** — still the deferred M1 item; now due at this boundary (credential item).
+3. **Widget breadth is honest, not exhaustive.** The library fixtures are vanilla approximations carrying each library's DOM signature; the shared ARIA combobox playbook (the positioning claim) is what's exercised. Virtualized listboxes, per-library quirks, and bespoke fixtures for all seven libraries are progressive hardening.
+4. **site-memory is in-memory** for M2; the better-sqlite3 persistent store sits behind the same interface (deferred to keep CI free of native builds — see DECISIONS).
+5. **CDP deep-control**: the Playwright backend already provides trusted CDP input; the extension's `chrome.debugger` deep-control opt-in (separately consented, persistent-banner disclosed) is a permission-ladder item, not separately built.
+6. **Extension live load + daemon socket listener** — unchanged from M1 (flagged there).
+
+### Reviewer notes (for Fable)
+
+- Highest scrutiny: `contribution/src/classify.ts` (the INV-6 gate) and `audit.ts` (the 100-record audit). Confirm the public-origin heuristic biases to B on doubt and `anonymize` strips values, query strings, and precise timestamps.
+- Confirm the ref-uniqueness fix (`semantic-engine` `makeRef`) leaves no reuse hazard.
+- `fill-record.ts` matcher is deterministic (no model, INV-11) — confirm.
+
+---
+
+## M3 — Reading at scale — NOT STARTED
+
+Blocked on M2 external review. Two credential items come due at this boundary (below).

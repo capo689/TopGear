@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { handleAttach, handleView, handleAct, handleConfirm, type DaemonLike } from "./handlers.js";
-import { AttachInput, ViewInput, ActInput, M1_TOOL_NAMES } from "./schemas.js";
+import { handleAttach, handleView, handleAct, handleFillRecord, handleConfirm, type DaemonLike } from "./handlers.js";
+import { AttachInput, ViewInput, ActInput, FillRecordInput, TOOL_NAMES } from "./schemas.js";
 import { createMcpServer } from "./server.js";
 import type { SemanticView, BatchResult } from "@browser-bridge/protocol";
 
@@ -25,6 +25,7 @@ const fake: DaemonLike = {
   attach: async (req) => ({ sessionId: "sess-1", capabilities: { schemaVersion: "v", vision: true, modes: ["semantic"], advancedCssSelectors: false }, _grant: req.grant }) as never,
   view: async () => view,
   act: async () => okResult,
+  fillRecord: async () => ({ matched: [{ field: "email", target: "Email", confidence: 0.9 }], unmatched: [], ambiguities: [], batch: okResult }),
   screenshot: async () => ({ bytesBase64: "AAAA", contentType: "image/png" }),
 };
 
@@ -61,16 +62,23 @@ describe("handlers dispatch to the daemon", () => {
     expect(r.status).toBe("completed");
   });
 
+  it("fill_record dispatches and returns matches", async () => {
+    const r = await handleFillRecord(fake, FillRecordInput.parse({ sessionId: "s", record: { email: "a@b.com" }, ambiguityPolicy: "ask" }));
+    expect(r.matched[0]?.field).toBe("email");
+    expect(r.batch.status).toBe("completed");
+  });
+
   it("bridge_confirm only nudges the UI; it authors nothing", () => {
     expect(handleConfirm()).toEqual({ surfaced: true });
   });
 });
 
 describe("tool surface", () => {
-  it("exposes exactly the 5 M1 tools, all bridge_-prefixed", () => {
-    expect(M1_TOOL_NAMES).toHaveLength(5);
-    expect(M1_TOOL_NAMES.every((n) => n.startsWith("bridge_"))).toBe(true);
-    expect(new Set(M1_TOOL_NAMES).size).toBe(5);
+  it("exposes exactly the 6 tools shipped through M2, all bridge_-prefixed", () => {
+    expect(TOOL_NAMES).toHaveLength(6);
+    expect(TOOL_NAMES.every((n) => n.startsWith("bridge_"))).toBe(true);
+    expect(new Set(TOOL_NAMES).size).toBe(6);
+    expect(TOOL_NAMES).toContain("bridge_fill_record");
   });
 
   it("constructs an MCP server over a daemon", () => {

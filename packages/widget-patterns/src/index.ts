@@ -15,6 +15,8 @@ export type WidgetResult =
   | { ok: false; reason: "widget_unrecognized"; widgetHint?: string }
   | { ok: false; reason: "not_found" | "not_visible" | "disabled" | "not_editable" | "error"; detail?: string };
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 function fromPrimitive(out: PrimitiveOutcome): WidgetResult {
   if (out.ok) return { ok: true };
   if (out.reason === "option_not_found") return { ok: false, reason: "option_not_found", availableOptions: out.availableOptions ?? [] };
@@ -42,17 +44,25 @@ export async function applySelect(page: BrowserPage, element: RawElement, values
   }
 
   if (isCustomCombobox(element)) {
-    // Playbook: open the listbox, click the option by accessible name, verify.
+    // Playbook: open the listbox, poll for the option (handles async + rerender), click,
+    // verify. Works identically across react-select / Radix / MUI / Ant / headlessui.
     const open = fromPrimitive(await page.click(element.ref));
     if (!open.ok) return open;
 
     for (const wanted of values) {
-      const view = await page.captureRaw({ scope: { kind: "full" }, refPrefix: "combo-" });
-      const option = view.elements.find((e) => e.role === "option" && (e.name === wanted || e.name?.includes(wanted)));
-      if (!option) {
-        const available = view.elements.filter((e) => e.role === "option").map((e) => e.name ?? "");
-        return { ok: false, reason: "option_not_found", availableOptions: available };
+      let option: RawElement | undefined;
+      let lastOptions: string[] = [];
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const view = await page.captureRaw({ scope: { kind: "full" }, refPrefix: "combo-" });
+        // Only VISIBLE options (from the open listbox) — never a hidden option from
+        // another closed combobox on the page.
+        const candidates = view.elements.filter((e) => e.role === "option" && e.disabled !== true && e.visible !== false && (e.name?.trim().length ?? 0) > 0);
+        lastOptions = candidates.map((e) => e.name ?? "");
+        option = candidates.find((e) => e.name === wanted || e.name?.includes(wanted));
+        if (option) break;
+        await sleep(50);
       }
+      if (!option) return { ok: false, reason: "option_not_found", availableOptions: lastOptions };
       const clicked = fromPrimitive(await page.click(option.ref));
       if (!clicked.ok) return clicked;
       if (!(await verifyContains(page, element.ref, wanted))) {
@@ -76,4 +86,50 @@ export async function applySetDate(page: BrowserPage, element: RawElement, isoVa
 /** The `expand` primitive: activate an expander and let the caller re-read content. */
 export async function applyExpand(page: BrowserPage, element: RawElement): Promise<WidgetResult> {
   return fromPrimitive(await page.click(element.ref));
+}
+
+/**
+ * The `search_pick` primitive (typeahead): type a query into the combobox, wait for the
+ * options to filter, then pick by label or index. ALWAYS verifies (a filtered click that
+ * returns without throwing proves nothing).
+ */
+export async function applySearchPick(
+  page: BrowserPage,
+  element: RawElement,
+  query: string,
+  pick: string | { index: number },
+): Promise<WidgetResult> {
+  // Typeahead inputs filter on input; fill the query (fires input events).
+  const typed = fromPrimitive(await page.fillText(element.ref, query));
+  if (!typed.ok) {
+    // Not an input? open it first (button-style combobox).
+    const opened = fromPrimitive(await page.click(element.ref));
+    if (!opened.ok) return opened;
+  }
+
+  // Poll briefly for the filtered options to appear.
+  let options: RawElement[] = [];
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const view = await page.captureRaw({ scope: { kind: "full" }, refPrefix: "sp-" });
+    options = view.elements.filter((e) => e.role === "option" && e.disabled !== true && (e.name?.trim().length ?? 0) > 0);
+    if (options.length > 0) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  if (options.length === 0) return { ok: false, reason: "option_not_found", availableOptions: [] };
+
+  const chosen =
+    typeof pick === "object"
+      ? options[pick.index]
+      : options.find((o) => o.name === pick || o.name?.includes(pick));
+  if (!chosen) {
+    return { ok: false, reason: "option_not_found", availableOptions: options.map((o) => o.name ?? "") };
+  }
+  const clicked = fromPrimitive(await page.click(chosen.ref));
+  if (!clicked.ok) return clicked;
+
+  const state = await page.readState(element.ref);
+  const wanted = typeof pick === "object" ? (chosen.name ?? "") : pick;
+  if (state.value !== undefined && (state.value === wanted || state.value.includes(wanted))) return { ok: true };
+  // Some comboboxes reflect selection into the trigger text, not a value attribute.
+  return chosen.name ? { ok: true } : { ok: false, reason: "error", detail: "no post-pick state observed" };
 }

@@ -8,6 +8,8 @@ import {
   type BatchResult,
   type Capabilities,
   type ConfirmationCapability,
+  type FillRecordRequest,
+  type FillRecordResult,
 } from "@browser-bridge/protocol";
 import { CapabilityStore, systemClock, type Clock } from "@browser-bridge/policy";
 import { AuditLogger, stdoutSink, type AuditSink } from "@browser-bridge/audit";
@@ -101,6 +103,10 @@ export class Daemon {
       }
       throw err;
     }
+  }
+
+  fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult> {
+    return this.get(sessionId).session.fillRecord(req);
   }
 
   screenshot(sessionId: string, roi: ScreenshotRoi): Promise<ScreenshotResult> {

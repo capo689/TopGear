@@ -87,3 +87,26 @@ section first. Dates are absolute.
   surface); the full inspector shell is later.
 - **Fable M0 findings folded:** goto destination-origin check (#1), hard-404 traversal
   test (#2), digit-gated blob scrubber (#3).
+
+### M2 build choices (2026-08-01)
+- **Widget detection** is heuristic over class/attribute signatures (react-select,
+  Radix `data-radix-*`, MUI, Ant, headlessui, downshift) + ARIA autocomplete for
+  typeahead. The shared ARIA combobox playbook drives them all (the positioning claim);
+  bespoke per-library fixtures + virtualized lists are progressive hardening.
+- **Element refs are globally unique** via a page-persistent `window.__bbRefSeq` counter.
+  Resetting per-capture collided new elements with prior refs — a real correctness bug
+  the widget gauntlet caught.
+- **`click` refuses a disabled element** (backend precheck) instead of timing out.
+- **fill_record matching** is deterministic token-Jaccard over accessible name +
+  autocomplete + stable id/name (INV-11, no model); ambiguity returns candidates.
+- **site-memory is in-memory for M2**; the better-sqlite3 persistent store implements the
+  SAME `SiteMemoryStore` interface and is deferred to keep CI free of native builds. This
+  is a temporary deviation from the "better-sqlite3" stack line, recorded here honestly.
+- **CDP deep-control**: the Playwright backend already dispatches trusted CDP input; the
+  extension `chrome.debugger` opt-in (separately consented) is a permission-ladder item,
+  not separately implemented at M2.
+- **commons-ingest** is a local HTTP stub with the exact routes the Vercel endpoint will
+  serve (`POST /contributions`, `POST /purge`); the `HttpIngestClient` is unchanged when
+  the real endpoint lands.
+- **Fable M1 findings folded:** real read-back for click/set_date/expand (#1), two
+  M5-inherited `it.fails` fixtures (#2), CI Chromium install step (#3).

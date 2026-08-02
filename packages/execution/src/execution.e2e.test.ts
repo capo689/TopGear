@@ -176,3 +176,95 @@ describe("M1 acceptance — grant escape fails with a teaching error", () => {
     await page.close();
   }, 30_000);
 });
+
+/**
+ * Fable M1 finding #2: seed the failing cases M5 must fix. These use it.fails — they
+ * currently FAIL (the action is NOT gated by the M1/M2 classifier), which is expected
+ * and documented. When the M5 full classifier + network backstop land and start gating
+ * these, it.fails flips to failing, alerting us to promote them to real assertions.
+ */
+describe("M2 acceptance — fill_record (0 mid-form turns)", () => {
+  it("matches a structured record to fields and fills them in ONE call", async () => {
+    const { session, sink, page } = await makeSession(FIXTURES.nativeForm);
+    const result = await session.fillRecord({
+      record: {
+        firstName: "Ada",
+        lastName: "Lovelace",
+        email: "ada@example.com",
+        phone: "5551234567",
+        city: "Bend",
+        postalCode: "97701",
+        state: "OR",
+        country: "US",
+        coverLetter: "Hello from Ada",
+        "Open to remote": true,
+        "I agree to the terms": true,
+      },
+      ambiguityPolicy: "ask",
+    });
+
+    // Deterministic matching found the fields; the fills ran as ONE verified batch.
+    expect(result.matched.length).toBeGreaterThanOrEqual(9);
+    expect(result.ambiguities).toHaveLength(0);
+    expect(result.batch.status).toBe("completed");
+    expect(result.batch.results.every((r) => r.status === "verified")).toBe(true);
+    // The record's values never entered the audit log.
+    expect(sink.lines.join("\n")).not.toContain("ada@example.com");
+    await page.close();
+  }, 45_000);
+});
+
+describe("M2 acceptance — consent-aware reflex ('Accept all' never auto-clicked)", () => {
+  it("chooses necessary-only / reject, never Accept all", async () => {
+    const { session, page } = await makeSession(FIXTURES.consentBanner);
+    const result = await session.handleConsentReflex();
+    expect(result.handled).toBe(true);
+    expect(result.action).toBe("reject");
+
+    const view = await session.view({ kind: "full" });
+    const status = view.alerts.map((a) => a.text).join(" ");
+    expect(status).toContain("necessary only");
+    expect(status).not.toContain("accept all");
+    await page.close();
+  }, 30_000);
+
+  it("surfaces the banner (no click) when configured to surface", async () => {
+    const page = await backend.attach(farm.url + FIXTURES.consentBanner);
+    const session = new Session({
+      sessionId: "s-surface",
+      page,
+      grant: grantFor(["low", "medium"]),
+      capabilities: new CapabilityStore(systemClock),
+      audit: new AuditLogger(new MemorySink()).child(newCorrelationId()),
+      secrets: new InMemorySecretBroker(),
+      clock: systemClock,
+      reflexConfig: { dismissNonEssentialPopups: true, consentDefault: "surface" },
+    });
+    const result = await session.handleConsentReflex();
+    expect(result.action).toBe("surface");
+    const view = await session.view({ kind: "full" });
+    expect(view.alerts.map((a) => a.text).join(" ")).not.toContain("accept all");
+    await page.close();
+  }, 30_000);
+});
+
+describe("M5-inherited security fixtures (expected-fail until M5)", () => {
+  it.fails("should gate a bland/icon-only destructive control", async () => {
+    const { session, page } = await makeSession(FIXTURES.blandDestructive);
+    const result = await session.act({ actions: [{ op: "click", target: { name: "OK" } }] });
+    expect(result.status).toBe("interrupted"); // M5: destructive intent gated without a high-intent label
+    await page.close();
+  }, 30_000);
+
+  it.fails("should gate a same-origin fetch()-based exfil of sensitive values", async () => {
+    const { session, page } = await makeSession(FIXTURES.fetchExfil);
+    const result = await session.act({
+      actions: [
+        { op: "fill", target: { name: "SSN" }, value: "123-45-6789" },
+        { op: "click", target: { name: "Continue" } },
+      ],
+    });
+    expect(result.status).toBe("interrupted"); // M5: cross-origin fetch of sensitive values caught
+    await page.close();
+  }, 30_000);
+});

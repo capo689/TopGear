@@ -29,5 +29,10 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test (unit + fixture farm)
+      # Browser suites (semantic-engine, browser-playwright, execution, daemon) need
+      # Chromium. Install it before tests so they run in CI, not just locally.
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test (unit + browser suites + fixture farm)
         run: pnpm test

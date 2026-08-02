@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bland destructive control</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+      button { font-size: 1.2rem; padding: 0.4rem 0.8rem; }
+      .status { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>Files</h1>
+    <p>A destructive action with a bland, icon-only label — no "delete"/"remove" tokens,
+      same-origin, not a form submit. The M1/M2 risk classifier CANNOT catch this by
+      label or form context. It is the case the M5 full classifier (page signals,
+      data-destructive, confirmation semantics) must gate.</p>
+
+    <!-- accessible name is the bland "OK"; the destructive intent is only in the
+         data-destructive attribute + the handler. -->
+    <button id="nuke" aria-label="OK" data-destructive="true" type="button">🗑</button>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <script>
+      document.getElementById("nuke").addEventListener("click", () => {
+        // Observable effect so click verification has a signal.
+        document.getElementById("status").textContent = "All files deleted";
+      });
+    </script>
+  </body>
+</html>

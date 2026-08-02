@@ -126,6 +126,27 @@ export function pageExtractor(options: ExtractOptions): RawView {
     return "";
   };
 
+  // Detector: scan the element + a few ancestors' classes/attributes for library tells.
+  const widgetLibrary = (el: Element): string | undefined => {
+    let sig = "";
+    let node: Element | null = el;
+    let depth = 0;
+    while (node && depth < 3) {
+      const cls = typeof node.className === "string" ? node.className : "";
+      sig += " " + cls + " " + Array.prototype.map.call(node.attributes, (a: Attr) => a.name).join(" ");
+      node = node.parentElement;
+      depth += 1;
+    }
+    sig = sig.toLowerCase();
+    if (sig.includes("react-select") || sig.includes("react-select__")) return "react-select";
+    if (sig.includes("data-radix") || sig.includes("radix-")) return "radix";
+    if (sig.includes("muiselect") || sig.includes("muiautocomplete") || sig.includes("mui-")) return "mui";
+    if (sig.includes("ant-select")) return "ant";
+    if (sig.includes("headlessui")) return "headlessui";
+    if (sig.includes("downshift")) return "downshift";
+    return undefined;
+  };
+
   const widgetKindOf = (el: Element): string | undefined => {
     const tag = el.tagName.toLowerCase();
     if (tag === "select") return "native-select";
@@ -134,7 +155,13 @@ export function pageExtractor(options: ExtractOptions): RawView {
       if (t === "date" || t === "datetime-local" || t === "month" || t === "week") return "native-date";
     }
     const role = el.getAttribute("role");
-    if (role === "combobox") return "custom-combobox";
+    if (role === "combobox") {
+      const lib = widgetLibrary(el);
+      if (lib) return lib;
+      if (el.getAttribute("aria-autocomplete") === "list" || el.getAttribute("aria-autocomplete") === "both") return "typeahead";
+      if (el.hasAttribute("data-datepicker") || el.getAttribute("aria-haspopup") === "dialog") return "custom-datepicker";
+      return "custom-combobox";
+    }
     return undefined;
   };
 
@@ -196,8 +223,14 @@ export function pageExtractor(options: ExtractOptions): RawView {
     return false;
   };
 
-  let refCounter = 0;
-  const makeRef = (): string => `${options.refPrefix}e${refCounter++}`;
+  // A page-persistent sequence so refs are GLOBALLY unique across extractions. Resetting
+  // per-capture would collide new elements with refs already assigned in a prior capture
+  // (e.g. two open comboboxes both tagged `combo-e2`), sending actions to the wrong node.
+  const makeRef = (): string => {
+    const w = window as unknown as { __bbRefSeq?: number };
+    w.__bbRefSeq = (w.__bbRefSeq ?? 0) + 1;
+    return `${options.refPrefix}e${w.__bbRefSeq}`;
+  };
 
   const INTERACTIVE_SELECTOR =
     'input, select, textarea, button, a[href], [role="button"], [role="combobox"], [role="checkbox"], [role="radio"], [role="option"], [contenteditable="true"], [role="menuitem"]';

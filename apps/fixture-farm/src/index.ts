@@ -11,9 +11,14 @@ export const FIXTURES = {
   dependentSelect: "/forms/dependent-select.html",
   nativeSelect: "/widgets/native-select.html",
   customSelect: "/widgets/custom-select.html",
+  libraryWidgets: "/widgets/library-widgets.html",
   accordion: "/widgets/accordion.html",
   injection: "/security/injection.html",
   grantEscape: "/security/grant-escape.html",
+  // Expected-fail until M5 (full risk classifier + network backstop). See MILESTONE_STATUS.
+  blandDestructive: "/security/bland-destructive.html",
+  fetchExfil: "/security/fetch-exfil.html",
+  consentBanner: "/security/consent-banner.html",
 } as const;
 
 export type FixtureName = keyof typeof FIXTURES;

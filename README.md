@@ -27,12 +27,16 @@ packages/
   daemon/            Session registry + gateway; binds grants, capability handshake
   mcp-server/        MCP surface: the 5 M1 tools over the daemon
   relay/             Extension relay contract; Zod-validated at every hop
+  site-memory/       Per-origin widget cache; patterns are hints, verified live (INV-3)
+  contribution/      Class A/B/C classifier, anonymize, sign, telemetry, viewer, kill switch
   evals/             Scorecard metrics, standard workflows, scripted-agent baselines
 apps/
   fixture-farm/      Self-hosted gauntlet site the tests drive
   extension/         MV3 content script + service-worker relay
   shim/              Dev native-messaging host
   inspector-ui/      Confirm dialog (renders the daemon's words, not the model's)
+  commons-ingest/    Quarantine intake (R1 stub; Vercel at ship)
+  cli/               browser-bridge doctor
 ```
 
 ## Develop

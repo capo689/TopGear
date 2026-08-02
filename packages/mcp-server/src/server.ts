@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SCHEMA_VERSION } from "@browser-bridge/protocol";
-import { AttachShape, ViewShape, ActShape, ScreenshotShape, ConfirmShape } from "./schemas.js";
-import type { AttachInput, ViewInput, ActInput, ScreenshotInput } from "./schemas.js";
-import { handleAttach, handleView, handleAct, handleScreenshot, handleConfirm, type DaemonLike } from "./handlers.js";
+import { AttachShape, ViewShape, ActShape, FillRecordShape, ScreenshotShape, ConfirmShape } from "./schemas.js";
+import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput } from "./schemas.js";
+import { handleAttach, handleView, handleAct, handleFillRecord, handleScreenshot, handleConfirm, type DaemonLike } from "./handlers.js";
 
 function jsonContent(obj: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(obj) }] };
@@ -30,6 +30,11 @@ export function createMcpServer(daemon: DaemonLike): McpServer {
     "bridge_act",
     { description: "Execute an Action batch and return a BatchResult (verified, exceptions-only).", inputSchema: ActShape as never },
     (async (args: ActInput) => jsonContent(await handleAct(daemon, args))) as never,
+  );
+  server.registerTool(
+    "bridge_fill_record",
+    { description: "Fill a form from a structured record in one call — deterministic field matching, 0 mid-form turns.", inputSchema: FillRecordShape as never },
+    (async (args: FillRecordInput) => jsonContent(await handleFillRecord(daemon, args))) as never,
   );
   server.registerTool(
     "bridge_screenshot",

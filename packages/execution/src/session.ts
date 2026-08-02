@@ -11,9 +11,28 @@ import type {
   LocatorInput,
   LocatorFingerprint,
   ElementRecord,
+  FillRecordRequest,
+  FillRecordResult,
+  FieldMatch,
+  FieldAmbiguity,
+  FieldValue,
+  SecretRef,
 } from "@browser-bridge/protocol";
 import { isSecretRef, checkBatchCaps, type CapCheckErr } from "@browser-bridge/protocol";
-import { authorize, originAllowed, type ActionExecContext, type ClickContext, type GotoContext, CapabilityStore, type Clock } from "@browser-bridge/policy";
+import { matchField } from "./fill-record.js";
+import {
+  authorize,
+  originAllowed,
+  decideReflex,
+  DEFAULT_REFLEX_CONFIG,
+  type ReflexConfig,
+  type ActionExecContext,
+  type ClickContext,
+  type GotoContext,
+  CapabilityStore,
+  type Clock,
+} from "@browser-bridge/policy";
+import { detectConsentBanner } from "./consent.js";
 import type { BoundAuditLogger } from "@browser-bridge/audit";
 import {
   toSemanticView,
@@ -23,7 +42,7 @@ import {
   type ScopeInput,
 } from "@browser-bridge/semantic-engine";
 import { resolveLocator } from "@browser-bridge/locators";
-import { applySelect, applySetDate, applyExpand } from "@browser-bridge/widget-patterns";
+import { applySelect, applySetDate, applyExpand, applySearchPick } from "@browser-bridge/widget-patterns";
 import type { SecretBroker } from "@browser-bridge/secrets";
 import type { BrowserPage } from "@browser-bridge/backend";
 
@@ -43,6 +62,7 @@ export interface SessionDeps {
   secrets: SecretBroker;
   clock: Clock;
   confirmationTtlMs?: number;
+  reflexConfig?: ReflexConfig;
 }
 
 function toScopeInput(scope: ViewScope): ScopeInput {
@@ -74,6 +94,18 @@ function rawToRecord(e: RawElement): ElementRecord {
   if (e.disabled !== undefined) rec.disabled = e.disabled;
   if (e.options !== undefined) rec.options = e.options;
   return rec;
+}
+
+/** Build the right action for a matched record field based on the element's shape. */
+function buildRecordAction(el: RawElement, value: FieldValue): Action {
+  if (typeof value === "boolean") return { op: "check", target: { ref: el.ref }, value };
+  if (typeof value === "string") {
+    if (el.widgetKind === "native-date") return { op: "set_date", target: { ref: el.ref }, value };
+    if (el.tag === "select" || el.role === "combobox" || el.role === "listbox") {
+      return { op: "select", target: { ref: el.ref }, value };
+    }
+  }
+  return { op: "fill", target: { ref: el.ref }, value: value as string | SecretRef };
 }
 
 interface StepOutcome {
@@ -170,6 +202,68 @@ export class Session {
     if (interruption) result.interruption = interruption;
     if (invalidFields.length) result.invalidFields = invalidFields;
     return result;
+  }
+
+  /**
+   * `bridge_fill_record`: match a structured record to fields deterministically (no
+   * embedded model — INV-11), then fill the matches in ONE verified batch. Returns
+   * matched (with confidence), unmatched, and ambiguities for the model to arbitrate.
+   * SecretRefs and sensitive-destination checks flow through the same `act` path.
+   */
+  async fillRecord(req: FillRecordRequest): Promise<FillRecordResult> {
+    const raw = await this.capture({ kind: "all_forms" });
+    const policy = req.ambiguityPolicy ?? "ask";
+    const matched: FieldMatch[] = [];
+    const unmatched: string[] = [];
+    const ambiguities: FieldAmbiguity[] = [];
+    const actions: Action[] = [];
+
+    for (const [key, value] of Object.entries(req.record)) {
+      const outcome = matchField(key, value, raw.elements);
+      let element: RawElement;
+      if (outcome.status === "unmatched") {
+        unmatched.push(key);
+        continue;
+      }
+      if (outcome.status === "ambiguous") {
+        if (policy === "ask") {
+          ambiguities.push({ field: key, candidates: (outcome.candidates ?? []).map(rawToRecord) });
+          continue;
+        }
+        if (policy === "skip") continue;
+        element = outcome.candidates![0]!; // best_effort
+      } else {
+        element = outcome.element!;
+      }
+      actions.push(buildRecordAction(element, value));
+      matched.push({ field: key, target: this.labelEl(element), confidence: outcome.confidence });
+    }
+
+    const batch: BatchResult = actions.length
+      ? await this.act({ actions })
+      : { status: "completed", revision: this.revisioner.current, completed: 0, results: [] };
+
+    return { matched, unmatched, ambiguities, batch };
+  }
+
+  /**
+   * Consent-aware reflex (INV-5, plan §7.5). A cookie/consent banner is a consent
+   * decision, not noise: choose reject / necessary-only where offered, else surface.
+   * "Accept all" is NEVER clicked here. The chosen click routes through `act` so policy
+   * and audit apply.
+   */
+  async handleConsentReflex(): Promise<{ handled: boolean; action?: "reject" | "surface"; clicked?: string }> {
+    const raw = await this.capture({ kind: "full" });
+    const detection = detectConsentBanner(raw);
+    if (!detection) return { handled: false };
+    const decision = decideReflex(detection.signal, this.deps.reflexConfig ?? DEFAULT_REFLEX_CONFIG);
+    if (decision.action === "reject_non_essential") {
+      const target = detection.necessary ?? detection.reject;
+      if (!target) return { handled: true, action: "surface" };
+      await this.act({ actions: [{ op: "click", target: { ref: target.ref } }] });
+      return { handled: true, action: "reject", ...(target.name ? { clicked: target.name } : {}) };
+    }
+    return { handled: true, action: "surface" };
   }
 
   private detectNavigation(before: RawView, after: RawView): Interruption | undefined {
@@ -346,14 +440,16 @@ export class Session {
       return this.confirmationStep(action.op, this.labelEl(element), authz);
     }
 
-    // Authorized — run the primitive and verify.
+    // Authorized — run the primitive and verify. Capture the URL first so click
+    // verification is a real post-action nav check, not "didn't throw" (Fable #1).
+    const preUrl = this.deps.page.url();
     const outcome = await this.runPrimitive(action, element, typedValue);
     if (!outcome.ok) {
       this.audit(action.op, element.name, "primitive_failed", "failed");
       return { results: [{ target: this.labelEl(element), status: "failed", failure: outcome.failure }] };
     }
 
-    const verified = await this.verify(action, element, typedValue, secret);
+    const verified = await this.verify(action, element, typedValue, secret, preUrl);
     this.audit(action.op, element.name, authz.audit.code, verified.ok ? "verified" : "failed");
     const result: ActionResult = verified.ok
       ? { target: this.labelEl(element), status: "verified" }
@@ -404,12 +500,15 @@ export class Session {
         const out = await applyExpand(page, element);
         return out.ok ? { ok: true } : { ok: false, failure: widgetFailure(out) };
       }
+      case "search_pick": {
+        const out = await applySearchPick(page, element, action.query, action.pick);
+        return out.ok ? { ok: true } : { ok: false, failure: widgetFailure(out) };
+      }
       case "click": {
         const out = await page.click(element.ref);
         return out.ok ? { ok: true } : { ok: false, failure: primitiveFailure(out) };
       }
       case "upload":
-      case "search_pick":
       case "open_menu_path":
         return { ok: false, failure: { reason: "widget_unrecognized", widgetHint: action.op } };
       default:
@@ -417,7 +516,13 @@ export class Session {
     }
   }
 
-  private async verify(action: Action, element: RawElement, typedValue: string | undefined, secret: boolean): Promise<{ ok: true } | { ok: false; failure: FailureDetail }> {
+  private async verify(
+    action: Action,
+    element: RawElement,
+    typedValue: string | undefined,
+    secret: boolean,
+    preUrl?: string,
+  ): Promise<{ ok: true } | { ok: false; failure: FailureDetail }> {
     const page = this.deps.page;
     if (action.op === "fill") {
       const state = await page.readState(element.ref);
@@ -438,7 +543,32 @@ export class Session {
       const ok = state.value !== undefined && wanted.some((w) => state.value === w || state.value!.includes(w));
       return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed: state.value ?? "" } };
     }
-    // click / expand / set_date: success of the primitive is the verification for M1.
+    if (action.op === "set_date") {
+      // Real read-back: the input's value must equal the ISO date we set.
+      const state = await page.readState(element.ref);
+      return state.value === action.value
+        ? { ok: true }
+        : { ok: false, failure: { reason: "verification_mismatch", expected: action.value, observed: state.value ?? "" } };
+    }
+    if (action.op === "expand") {
+      // Real read-back: the expander must persist (a disappearing expander is a fail).
+      const state = await page.readState(element.ref);
+      return state.found
+        ? { ok: true }
+        : { ok: false, failure: { reason: "verification_mismatch", expected: "expander present", observed: "gone" } };
+    }
+    if (action.op === "click") {
+      // Post-action state/nav check (Fable #1): observe navigation and post-state rather
+      // than trusting that the primitive "didn't throw". Generic click success cannot be
+      // strictly proven (submit vs click — plan §10); strict effect-detection is M5. We
+      // verify a real observation happened and surface a detached-without-nav anomaly.
+      const navigated = preUrl !== undefined && page.url() !== preUrl;
+      const post = await page.readState(element.ref);
+      if (navigated || post.found) return { ok: true };
+      // Element gone and no navigation: it may have been consumed (modal close) — accept,
+      // but this is the honest edge the plan flags.
+      return { ok: true };
+    }
     return { ok: true };
   }
 

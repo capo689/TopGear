@@ -123,6 +123,7 @@ class PlaywrightPage implements BrowserPage {
   async click(ref: string): Promise<PrimitiveOutcome> {
     const s = await this.readState(ref);
     if (!s.found) return { ok: false, reason: "not_found" };
+    if (s.disabled) return { ok: false, reason: "disabled" };
     if (!s.visible) return { ok: false, reason: "not_visible" };
     try {
       await this.loc(ref).click({ timeout: 5000 });
