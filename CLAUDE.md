@@ -87,6 +87,21 @@ A change that trades a gate for a turn is rejected, always.
   Vercel, Apple ID); (b) anything that costs money; (c) anything that modifies files
   outside the TopGear repo or changes system settings.
 
+## Git, remote, and deploy (standing law)
+
+- **Remote:** GitHub `github.com/capo689/TopGear` (private) is the remote. PUSH FREELY at
+  every feature/milestone boundary. (This supersedes and DELETES any "local-only / no
+  push" guidance — that was a misread of an offhand comment and no longer applies.)
+- **Deploy branch:** `main`. Vercel auto-deploys `main` → production. A milestone lands
+  on `main` ONLY after it passes Fable's review — merging to `main` is shipping, so only
+  reviewed milestones land there. Build on a milestone branch; merge on review pass.
+- **Secrets never enter the repo (INV-4):** any ingest/deploy credential (Vercel Blob
+  token, signing secret) lives in Vercel environment variables ONLY, never in code,
+  config, or commits.
+- **Live acceptance CLIs:** Codex/GPT is an approved, subscription-authenticated host CLI
+  for live model-agnostic acceptance alongside Claude Code — still no frontier API keys,
+  consistent with INV-11.
+
 ## Definition of done (every feature, every PR)
 
 1. Fixture-farm test passing (new behavior = new fixtures).

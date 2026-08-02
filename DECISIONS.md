@@ -10,7 +10,13 @@ section first. Dates are absolute.
   builder instructions auto-load every session.
 - **Repo layout:** the TopGear repo root *is* the monorepo root (`apps/`, `packages/`
   live at root), not a nested `browser-bridge/` directory.
-- **Commits:** local only, at package/feature boundaries, no push (user directive).
+- **Git & deploy (standing law, updated 2026-08-01):** GitHub
+  `github.com/capo689/TopGear` (private) is the remote — push at every feature/milestone
+  boundary. `main` is the Vercel auto-deploy production branch; a milestone lands on
+  `main` only after Fable's review (merge = ship). Secrets NEVER enter the repo (INV-4)
+  — Vercel env vars only. Codex/GPT is an approved subscription-auth host CLI for live
+  acceptance (no API keys, INV-11). **This supersedes and deletes the earlier
+  "local-only / no push" note, which was a misread.**
 
 ### Standing rules
 - **Toolchain autonomy (user directive):** the builder installs local build
@@ -110,3 +116,9 @@ section first. Dates are absolute.
   the real endpoint lands.
 - **Fable M1 findings folded:** real read-back for click/set_date/expand (#1), two
   M5-inherited `it.fails` fixtures (#2), CI Chromium install step (#3).
+
+### M3 inbox — Fable R1 review finding (fold FIRST in M3)
+- **Auth tri-state (R1 finding):** the classifier must treat `authenticated` as a
+  tri-state — `true` OR **absent/unknown** → Class B, never contributed. Only an
+  explicitly-confirmed unauthenticated public origin is eligible for Class C. Then re-run
+  real pattern-runner extraction output back through `runClassificationAudit`.
