@@ -9,31 +9,30 @@ import { InstallIdentity } from "./identity.js";
  * values, no query strings, and only public origins.
  */
 export function generateAuditFixtures(count: number, seedBaseMs = 1_700_000_000_000): CandidatePattern[] {
-  const origins: { origin: string; kind: "public" | "intranet" | "authenticated" }[] = [
-    { origin: "https://example.com", kind: "public" },
-    { origin: "https://shop.io", kind: "public" },
-    { origin: "https://news.org", kind: "public" },
-    { origin: "http://intranet.local", kind: "intranet" },
-    { origin: "http://10.0.0.5", kind: "intranet" },
-    { origin: "https://admin.internal", kind: "intranet" },
-    { origin: "https://portal.company.com", kind: "authenticated" },
-    { origin: "https://bank.com", kind: "authenticated" },
+  const origins: { origin: string; auth: "unauthenticated" | "authenticated" | "unknown" }[] = [
+    { origin: "https://example.com", auth: "unauthenticated" }, // → C
+    { origin: "https://shop.io", auth: "unauthenticated" }, // → C
+    { origin: "https://news.org", auth: "unknown" }, // public but UNKNOWN auth → B (R1 finding)
+    { origin: "http://intranet.local", auth: "unauthenticated" }, // non-public → B
+    { origin: "http://10.0.0.5", auth: "unknown" }, // → B
+    { origin: "https://admin.internal", auth: "unauthenticated" }, // non-public → B
+    { origin: "https://portal.company.com", auth: "authenticated" }, // → B
+    { origin: "https://bank.com", auth: "authenticated" }, // → B
   ];
   const out: CandidatePattern[] = [];
   for (let i = 0; i < count; i++) {
     const spec = origins[i % origins.length]!;
     const withValue = i % 11 === 0; // sprinkle Class A patterns
-    const pattern: CandidatePattern = {
+    out.push({
       origin: spec.origin,
       url: `${spec.origin}/account/settings?token=SECRET${i}&user=alice@example.com`,
       kind: "widget",
       widgetKind: "react-select",
       fingerprint: { role: "combobox", name: "Country", autocomplete: "country" },
       observedAt: seedBaseMs + i * 3_600_000,
-    };
-    if (spec.kind === "authenticated") pattern.authenticated = true;
-    if (withValue) pattern.value = `user typed value ${i}`;
-    out.push(pattern);
+      authStatus: spec.auth,
+      ...(withValue ? { value: `user typed value ${i}` } : {}),
+    });
   }
   return out;
 }

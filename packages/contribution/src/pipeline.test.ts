@@ -11,9 +11,9 @@ function deps(ingest: IngestClient = new InMemoryIngest()) {
 }
 
 const patterns: CandidatePattern[] = [
-  { origin: "https://example.com", url: "https://example.com/a?token=x", kind: "widget", widgetKind: "react-select", fingerprint: { role: "combobox", name: "Country" }, observedAt: 1_700_000_000_000 },
-  { origin: "http://intranet.local", kind: "widget", observedAt: 1_700_000_000_000 }, // Class B
-  { origin: "https://example.com", kind: "form-field-map", value: "secret", observedAt: 1_700_000_000_000 }, // Class A
+  { origin: "https://example.com", url: "https://example.com/a?token=x", kind: "widget", widgetKind: "react-select", fingerprint: { role: "combobox", name: "Country" }, observedAt: 1_700_000_000_000, authStatus: "unauthenticated" }, // Class C
+  { origin: "http://intranet.local", kind: "widget", observedAt: 1_700_000_000_000, authStatus: "unauthenticated" }, // Class B (non-public)
+  { origin: "https://example.com", kind: "form-field-map", value: "secret", observedAt: 1_700_000_000_000, authStatus: "unauthenticated" }, // Class A (value)
 ];
 
 describe("ContributionPipeline", () => {

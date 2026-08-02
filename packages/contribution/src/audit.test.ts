@@ -37,6 +37,11 @@ describe("classification audit (R1 gate)", () => {
     }
   });
 
+  it("withholds a PUBLIC origin whose auth status is unknown (R1 finding)", () => {
+    // news.org is a public TLD but its auth status is unknown → must never be contributed.
+    expect(result.contributed.some((r) => r.origin === "https://news.org")).toBe(false);
+  });
+
   it("produces a human-readable report for the reviewer", () => {
     const report = renderAuditReport(result);
     expect(report).toContain("Classification audit: 100 records");

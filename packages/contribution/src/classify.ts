@@ -6,6 +6,14 @@
 
 export type DataClass = "A" | "B" | "C";
 
+/**
+ * Authentication status of the origin the pattern was observed on. Tri-state on purpose
+ * (R1 review finding): only an EXPLICITLY unauthenticated public origin is eligible for
+ * Class C. `authenticated` and `unknown` (and absent) both classify DOWN to Class B — we
+ * never contribute structure we cannot prove was seen unauthenticated.
+ */
+export type AuthStatus = "unauthenticated" | "authenticated" | "unknown";
+
 /** A structural pattern extracted from site memory. By construction it should carry NO
  * user values — but a stray value is defense-in-depth classified Class A and discarded. */
 export interface CandidatePattern {
@@ -25,8 +33,8 @@ export interface CandidatePattern {
   observedAt: number;
   /** MUST be absent for a real pattern; if present, this is Class A user content. */
   value?: string;
-  /** True if the origin was reached under authentication → Class B. */
-  authenticated?: boolean;
+  /** Auth status of the origin. Absent === "unknown" → classified DOWN to Class B. */
+  authStatus?: AuthStatus;
 }
 
 export interface ClassificationResult {
@@ -78,12 +86,17 @@ export function classify(pattern: CandidatePattern, probe: PublicOriginProbe = h
   if (pattern.value !== undefined && pattern.value !== "") {
     return { dataClass: "A", reason: "carries a user value" };
   }
-  // Class B — authenticated / non-public origin structure.
-  if (pattern.authenticated) {
+  // Auth tri-state (R1 finding): authenticated OR unknown/absent → Class B.
+  const auth: AuthStatus = pattern.authStatus ?? "unknown";
+  if (auth === "authenticated") {
     return { dataClass: "B", reason: "authenticated origin" };
   }
   const pub = probe.isPublic(pattern.origin);
-  if (pub === true) return { dataClass: "C", reason: "public-origin structure" };
-  if (pub === false) return { dataClass: "B", reason: "non-public origin" };
-  return { dataClass: "B", reason: "public status unknown — classified down" };
+  if (pub !== true) {
+    return { dataClass: "B", reason: pub === false ? "non-public origin" : "public status unknown — classified down" };
+  }
+  if (auth !== "unauthenticated") {
+    return { dataClass: "B", reason: "auth status unknown — classified down" };
+  }
+  return { dataClass: "C", reason: "public unauthenticated structure" };
 }
