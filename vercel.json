@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "echo 'commons-ingest: static status page + serverless functions; no web build'",
+  "outputDirectory": "public",
+  "installCommand": "echo 'no install needed — ingest functions are dependency-free'",
+  "functions": {
+    "api/*.ts": { "maxDuration": 10 }
+  }
+}

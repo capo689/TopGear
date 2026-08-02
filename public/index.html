@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser Bridge — Commons Ingest</title>
+<style>
+ body{font:16px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:44rem;margin:4rem auto;padding:0 1.5rem;color:#111}
+ code{background:#f4f4f5;padding:.15em .4em;border-radius:4px;font-size:.9em}
+ .r{border-left:3px solid #d4d4d8;padding-left:1rem;margin:1rem 0}
+ .m{display:inline-block;background:#111;color:#fff;padding:.1em .5em;border-radius:4px;font-size:.8em;font-weight:600}
+ footer{margin-top:3rem;color:#71717a;font-size:.9em}
+</style>
+</head>
+<body>
+<h1>Commons Ingest</h1>
+<p>Quarantine intake for the Browser Bridge Pattern Commons. Accepts anonymized
+<strong>Class C</strong> structural patterns only — never page content, values, or
+non-public origin structure (INV-6). Promotion and serving are Release 2.</p>
+<div class="r"><p><span class="m">POST</span> <code>/api/contributions</code><br>
+Accept one signed Class C record into quarantine.</p></div>
+<div class="r"><p><span class="m">POST</span> <code>/api/purge</code><br>
+<code>{ installId }</code> — retroactively purge an install's quarantined records.</p></div>
+<p><a href="/api/health">/api/health</a> reports storage configuration state.</p>
+<footer>Browser Bridge · Apache-2.0 · collection live per INV-10</footer>
+</body>
+</html>
