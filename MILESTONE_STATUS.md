@@ -217,6 +217,23 @@ scheduler (global + per-origin governors, grant budgets, backoff) · isolated Pl
 2. **site-memory + harvest-store are in-memory** — better-sqlite3 (+FTS5) sits behind the same interfaces (the standing deviation, in DECISIONS). Class A content is local-only regardless.
 3. **Daemon crawl policy uses the origin allowlist**; per-origin robots *fetching* is exercised in the runner tests but the daemon does not auto-fetch robots yet (enforced when configured). Small addition.
 4. **Extension live load / daemon socket listener** — unchanged from M1 (flagged).
+5. **Robots parser is prefix-only** — honors `User-agent: *` `Disallow:` prefixes but does
+   NOT support `Allow:` overrides, wildcard/`$` patterns, or per-user-agent groups. It errs
+   conservative (over-blocks rather than under), but this is a known gap to harden.
+
+### Post-review landing (Vercel + parity)
+
+- **Production is live** (`commons-ingest` on Vercel): `/api/health` → 200, `/api/contributions`
+  GET → 405, status page → 200, no SSO. Storage reports `unconfigured` until a Vercel Blob
+  token is set (honest — 503 rather than silent drops). Vercel Authentication disabled so
+  end-user daemons can POST.
+- **Ingest parity test** (`apps/commons-ingest/src/parity.test.ts`): the local stub and the
+  Vercel function return identical status for identical payloads across all 8 cases
+  (202 / 400 / 422×4 / 413 / 503) — closing the POST-body paths Fable could code-review but
+  not exercise live, and guarding the two copies of the contract against drift.
+- **Contribute-path audit** (`pattern-runner/src/audit-integration.test.ts`): a public+unauthenticated
+  probe stub over real harvested pages contributes STRUCTURE (widgetKind, fingerprint) but
+  ZERO harvested text/values — the withhold *and* contribute paths are both exercised now.
 
 ### Reviewer notes (for Fable)
 

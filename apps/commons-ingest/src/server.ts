@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { ContributionRecord } from "@browser-bridge/contribution";
+import { validateContribution } from "./validate.js";
 
 /**
  * The quarantine intake (plan §2 cloud/ingest — "deliberately trivial"). This local stub
@@ -26,8 +27,11 @@ function readBody(req: import("node:http").IncomingMessage): Promise<string> {
   });
 }
 
-export function startCommonsIngest(options: { port?: number; host?: string } = {}): Promise<CommonsIngest> {
+export function startCommonsIngest(
+  options: { port?: number; host?: string; storageConfigured?: boolean } = {},
+): Promise<CommonsIngest> {
   const host = options.host ?? "127.0.0.1";
+  const storageConfigured = options.storageConfigured ?? true;
   const quarantine: ContributionRecord[] = [];
 
   const server = createServer((req, res) => {
@@ -38,25 +42,30 @@ export function startCommonsIngest(options: { port?: number; host?: string } = {
     if (req.method !== "POST") return send(405, { error: "method not allowed" });
 
     void readBody(req).then((raw) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        return send(400, { error: "invalid json" });
-      }
       if (req.url === "/contributions") {
-        // Minimal shape guard; deep validation/quorum is R2's promotion pipeline.
-        const rec = parsed as Partial<ContributionRecord>;
-        if (!rec.origin || !rec.installId || !rec.signature) return send(400, { error: "missing fields" });
-        quarantine.push(rec as ContributionRecord);
-        return send(202, { accepted: true });
+        // Oversize is checked BEFORE parse (matches api/contributions.ts).
+        let rec: Record<string, unknown> | null;
+        try {
+          rec = JSON.parse(raw) as Record<string, unknown>;
+        } catch {
+          rec = null;
+        }
+        const result = validateContribution(raw.length, rec, { storageConfigured });
+        if (result.status === 202 && rec) quarantine.push(rec as unknown as ContributionRecord);
+        return send(result.status, result.body);
       }
       if (req.url === "/purge") {
-        const { installId } = parsed as { installId?: string };
-        if (!installId) return send(400, { error: "missing installId" });
+        let parsed: { installId?: string };
+        try {
+          parsed = JSON.parse(raw) as { installId?: string };
+        } catch {
+          return send(400, { error: "invalid json" });
+        }
+        if (!parsed.installId) return send(400, { error: "missing installId" });
+        if (!storageConfigured) return send(503, { error: "quarantine storage not configured" });
         const before = quarantine.length;
         for (let i = quarantine.length - 1; i >= 0; i--) {
-          if (quarantine[i]!.installId === installId) quarantine.splice(i, 1);
+          if (quarantine[i]!.installId === parsed.installId) quarantine.splice(i, 1);
         }
         return send(200, { purged: before - quarantine.length });
       }

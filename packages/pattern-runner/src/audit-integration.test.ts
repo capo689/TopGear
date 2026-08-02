@@ -4,7 +4,7 @@ import { createPlaywrightBackend } from "@browser-bridge/browser-playwright";
 import { Scheduler, TaskBudget } from "@browser-bridge/scheduler";
 import { InMemoryHarvestStore } from "@browser-bridge/harvest-store";
 import type { BrowserBackend } from "@browser-bridge/backend";
-import { runClassificationAudit, renderAuditReport, type CandidatePattern } from "@browser-bridge/contribution";
+import { runClassificationAudit, renderAuditReport, type CandidatePattern, type PublicOriginProbe } from "@browser-bridge/contribution";
 import { PatternRunner, CrawlPolicy, parseRobots } from "./index.js";
 
 /**
@@ -58,5 +58,48 @@ describe("pattern-runner output → classification audit (no leakage)", () => {
     expect(audit.byClass.B).toBe(candidates.length);
     // The harvested content never appears in a contribution (there are none).
     expect(JSON.stringify(audit.contributed)).not.toContain("gadget");
+  }, 60_000);
+
+  it("CONTRIBUTES structure from a public+unauthenticated origin but ZERO harvested text/values", async () => {
+    // The withhold path above proves nothing leaves for a private origin. This exercises
+    // the CONTRIBUTE path with a probe stub that treats the harvested origin as public.
+    const store = new InMemoryHarvestStore();
+    const origin = new URL(farm.url).origin;
+    const runner = new PatternRunner({
+      backend,
+      scheduler: new Scheduler({ maxGlobalConcurrency: 3, perOriginConcurrency: 3 }),
+      store,
+      crawl: new CrawlPolicy({ allowedOrigins: [origin], robots: parseRobots("User-agent: *\n") }),
+      budget: new TaskBudget({ maxPages: 20 }),
+    });
+    await runner.run({ urls: Array.from({ length: 5 }, (_, i) => `${farm.url}/harvest/${i + 1}`) });
+    expect(store.count()).toBe(5);
+
+    const publicProbe: PublicOriginProbe = { isPublic: () => true };
+    // Structural candidates the contribution pipeline would derive — NO harvested text.
+    const candidates: CandidatePattern[] = store.list().map((r) => ({
+      origin: new URL(r.url).origin,
+      kind: "widget",
+      widgetKind: "native-select",
+      fingerprint: { role: "combobox", name: "Country", autocomplete: "country" },
+      observedAt: r.harvestedAt,
+      authStatus: "unauthenticated",
+    }));
+
+    const audit = runClassificationAudit(candidates, publicProbe);
+    expect(audit.leaks, renderAuditReport(audit)).toHaveLength(0);
+    expect(audit.contributed).toHaveLength(candidates.length); // all Class C now
+
+    for (const rec of audit.contributed) {
+      expect(rec.widgetKind).toBe("native-select"); // STRUCTURE is contributed
+      expect(rec.fingerprint?.role).toBe("combobox");
+      const serialized = JSON.stringify(rec);
+      // The harvested CONTENT (Class A) is never in a contribution.
+      expect(serialized).not.toContain("gadget");
+      expect(serialized).not.toContain("Harvest content");
+      expect(serialized).not.toContain("costs");
+    }
+    // ...while the content DOES live locally in the harvest store (Class A).
+    expect(store.search("gadget").length).toBeGreaterThan(0);
   }, 60_000);
 });

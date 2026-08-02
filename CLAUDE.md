@@ -124,6 +124,10 @@ A change that trades a gate for a turn is rejected, always.
 - Commit at logical package/feature boundaries with descriptive messages.
 - Resolve plan §16 open decisions during M0; record each in `DECISIONS.md` with
   rationale.
+- Production deploy is part of "done." `main` auto-deploys to Vercel; at every milestone
+  boundary AND after any merge to `main`, verify production is green (e.g. `GET /api/health`
+  → 200, or the Vercel deployment status). A milestone is NOT done if production is failing
+  — `main` once sat red through six deployments unnoticed. Surface it, don't assume it.
 
 ## External review protocol
 
