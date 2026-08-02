@@ -18,7 +18,7 @@ export function createMcpServer(daemon: DaemonLike): McpServer {
 
   server.registerTool(
     "bridge_attach",
-    { description: "Attach a tab/session; binds a TaskGrant; returns capabilities + schema version.", inputSchema: AttachShape as never },
+    { description: "Attach a tab/session; binds a TaskGrant; returns capabilities + the first SemanticView (initialView). Pass `scope` to match the task (e.g. all_forms for a form, content for a read) so the initial view is usable without a follow-up bridge_view; defaults to full.", inputSchema: AttachShape as never },
     (async (args: AttachInput) => jsonContent(await handleAttach(daemon, args))) as never,
   );
   server.registerTool(
