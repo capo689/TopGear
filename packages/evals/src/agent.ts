@@ -7,10 +7,13 @@ import type { WorkflowSpec } from "./workflows.js";
  * tool actually operates:
  *   - screenshot-loop: one screenshot + one action per interactive unit (coordinate agent).
  *   - playwright-mcp:  one a11y snapshot, then one un-batched action per unit.
- *   - bridge:          attach (returns the first view via streamed freshness), then one
+ *   - bridge:          attach (returns the first view as `initialView`), then one
  *                      verified batch. This is the approach under test.
  * Live model-driven runs through the host CLIs (Claude Code, Codex) are captured at M1;
- * these scripted turns are the model-independent baseline.
+ * these scripted turns are the model-independent baseline. NOTE: the first live dogfood
+ * run measured bridge=3 for `form` because attach did NOT return a view — a real gap this
+ * scripted model masked. attach now returns `initialView` (field-fix #3), restoring the
+ * 2-turn path; the live re-measure is pending Ace's next run (BASELINES.md records both).
  */
 export type AgentKind = "screenshot-loop" | "playwright-mcp" | "bridge";
 export type ToolName = "attach" | "view" | "act" | "screenshot" | "fill_record" | "confirm";
@@ -93,7 +96,7 @@ function bridgeSteps(wf: WorkflowSpec): AgentStep[] {
   switch (wf.shape) {
     case "form":
       return [
-        { toolCalls: [{ tool: "attach", note: "binds grant, returns first view" }] },
+        { toolCalls: [{ tool: "attach", note: "binds grant, returns initialView" }] },
         { toolCalls: [{ tool: "act", note: "one batch: fill every field, embedded waits, submit" }] },
       ];
     case "single-widget":
@@ -106,7 +109,7 @@ function bridgeSteps(wf: WorkflowSpec): AgentStep[] {
     case "expand-read":
       return [
         { toolCalls: [{ tool: "attach" }] },
-        { toolCalls: [{ tool: "act", note: "expand; streamed freshness returns the loaded content" }] },
+        { toolCalls: [{ tool: "act", note: "expand; batch re-capture returns the loaded content" }] },
       ];
     case "blocked-action":
       return [

@@ -8,7 +8,7 @@ import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput
  * unit-tested with a fake and the SDK wiring stays a thin skin (zero logic in adapters).
  */
 export interface DaemonLike {
-  attach(req: { grant: AttachInput["grant"]; url?: string }): Promise<AttachResult>;
+  attach(req: { grant: AttachInput["grant"]; url?: string; scope?: AttachInput["scope"] }): Promise<AttachResult>;
   view(sessionId: string, scope: ViewScope): Promise<SemanticView>;
   act(sessionId: string, batch: ActionBatch): Promise<BatchResult>;
   fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult>;
@@ -18,7 +18,10 @@ export interface DaemonLike {
 }
 
 export function handleAttach(daemon: DaemonLike, input: AttachInput): Promise<AttachResult> {
-  return daemon.attach(input.url === undefined ? { grant: input.grant } : { grant: input.grant, url: input.url });
+  const req: { grant: AttachInput["grant"]; url?: string; scope?: AttachInput["scope"] } = { grant: input.grant };
+  if (input.url !== undefined) req.url = input.url;
+  if (input.scope !== undefined) req.scope = input.scope;
+  return daemon.attach(req);
 }
 
 export function handleView(daemon: DaemonLike, input: ViewInput): Promise<SemanticView> {

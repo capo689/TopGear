@@ -9,6 +9,20 @@ report-back template are at the bottom.
 Requires **Node 20+**, **Google Chrome**, and **git**. (This is the dev channel — a
 single signed installer is M6.)
 
+### Prerequisite: pnpm via corepack
+
+This repo pins **pnpm 9.15.9** through corepack. If `pnpm` is not on your PATH (it isn't
+by default on a fresh machine — the first live tester hit exactly this), enable it once:
+
+```bash
+corepack enable
+corepack prepare pnpm@9.15.9 --activate
+```
+
+If `corepack` itself isn't found, it ships with Node — `npm i -g corepack` restores it.
+The activated pnpm shim lives under corepack's bin dir (often `~/.local/bin` or
+`~/Library/pnpm`); make sure that's on your PATH for the commands below.
+
 ---
 
 ## Path A — isolated browser (5 minutes, no extension)
@@ -20,6 +34,16 @@ corepack enable
 pnpm install
 pnpm build
 pnpm exec playwright install chromium
+```
+
+**Already have the repo cloned?** Don't re-clone — refresh and rebuild in place:
+
+```bash
+cd browser-bridge        # your existing checkout
+git pull
+pnpm install             # no-op if deps unchanged
+pnpm build               # turbo-cached; rebuilds only what changed
+pnpm exec playwright install chromium   # no-op if already installed
 ```
 
 Register the MCP server with your host CLI (one line):

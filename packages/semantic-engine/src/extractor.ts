@@ -14,10 +14,11 @@ export function readElementState(ref: string): ElementStateResult {
     checked?: boolean;
     disabled?: boolean;
     checkValidity?: () => boolean;
-    selectedOptions?: ArrayLike<{ value: string }>;
+    selectedOptions?: ArrayLike<{ value: string; label?: string; text?: string }>;
   };
   const tag = el.tagName.toLowerCase();
   let value: string | undefined;
+  let selectedLabel: string | undefined;
   let checked: boolean | undefined;
   if (tag === "input") {
     const t = (el.getAttribute("type") ?? "text").toLowerCase();
@@ -26,12 +27,17 @@ export function readElementState(ref: string): ElementStateResult {
   } else if (tag === "textarea") {
     value = anyEl.value;
   } else if (tag === "select") {
-    value = Array.prototype.map.call(anyEl.selectedOptions ?? [], (o: { value: string }) => o.value).join(", ");
+    const selected = Array.prototype.slice.call(anyEl.selectedOptions ?? []) as { value: string; label?: string; text?: string }[];
+    value = selected.map((o) => o.value).join(", ");
+    // The option's visible label, so verification can match a label the model requested
+    // ("Oregon") even when the option value differs ("OR").
+    selectedLabel = selected.map((o) => o.label || o.text || "").join(", ");
   } else if (el.getAttribute("role") === "combobox") {
     const controlled = el.getAttribute("aria-controls");
     const list = controlled ? document.getElementById(controlled) : null;
     const selected = list?.querySelector('[aria-selected="true"]');
     value = selected ? (selected.textContent ?? "").replace(/\s+/g, " ").trim() : undefined;
+    selectedLabel = value; // a combobox's rendered value IS its label
   }
   const disabled = anyEl.disabled === true || el.getAttribute("aria-disabled") === "true";
   const invalid =
@@ -45,6 +51,7 @@ export function readElementState(ref: string): ElementStateResult {
     (el as HTMLElement).getClientRects().length > 0;
   const out: ElementStateResult = { found: true, disabled, invalid, visible };
   if (value !== undefined && value !== "") out.value = value;
+  if (selectedLabel !== undefined && selectedLabel !== "") out.selectedLabel = selectedLabel;
   if (checked !== undefined) out.checked = checked;
   return out;
 }

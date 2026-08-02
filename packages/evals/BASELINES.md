@@ -22,7 +22,7 @@ dependency. Baselines therefore come in two tiers:
 
 Turns = model round trips. `screenshot-loop` = one screenshot + one action per unit;
 `playwright-mcp` = one a11y snapshot then one un-batched action per unit; `bridge` =
-attach (first view via streamed freshness) then one verified batch.
+attach (which returns the first view as `initialView`) then one verified batch.
 
 | Workflow | shape | units | screenshot-loop | playwright-mcp | bridge | bridge vs screenshot |
 |---|---|---:|---:|---:|---:|---:|
@@ -47,3 +47,22 @@ attach (first view via streamed freshness) then one verified batch.
   (INV-9). Those are gate-level wins, which outrank turns on the scorecard.
 - The M1 target ("beat both baselines ≥ 3× on turns") is a claim about **form**
   workflows; the 20-field form already clears it in the scripted tier.
+
+## Live tier — first dogfood run (R1, Claude Code / Sonnet 4.6)
+
+The first live run of the 20-field form measured **bridge = 3 turns**, not the scripted
+2: attach → view → act. The scripted model had folded the first view into attach, but
+the live daemon's `attach` returned only `{sessionId, capabilities}` — no view — so a
+real agent needed a separate `bridge_view`. That was a real gap the scripted tier masked,
+not a modeling nicety.
+
+**Fixed (field-fix #3):** `attach` now returns `initialView` (full scope by default,
+caller-scopable), so the 2-turn path — attach(view) → act — is real. The scripted
+baseline of 2 now matches the daemon's actual behavior (asserted in
+`packages/daemon/src/daemon.test.ts`). The **live re-measure is pending Ace's next run**;
+this row will record the measured number, not an asserted one:
+
+| Workflow | tier | measured turns | note |
+|---|---|---:|---|
+| fill-native-form | live (pre-fix) | 3 | attach returned no view |
+| fill-native-form | live (post-fix) | _pending re-measure_ | attach now returns initialView |

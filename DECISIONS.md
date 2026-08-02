@@ -142,3 +142,21 @@ section first. Dates are absolute.
 - **8-tool surface complete:** `bridge_run_pattern` + `bridge_harvest` added. No ninth tool.
 - **Bonus fix:** `click` refuses a disabled element (backend precheck) — surfaced by the
   widget gauntlet.
+
+## R1 field-fixes (first live dogfood run — Ace, Claude Code/Sonnet 4.6)
+
+- **Select verification matches on value OR label.** The backend already resolves an
+  option by either its `value` or its visible text (browser-playwright), so `readState`
+  now also returns `selectedLabel` and verify accepts a match on either. Verifying against
+  `value` alone false-failed label-requested selects ("Oregon" vs value "OR"). A false
+  negative is a correctness-gate defect, not cosmetic.
+- **`invalidFields` reads a final re-captured view.** `working` only refreshes on
+  page-changing ops, so fills/checks after the last click were invisible to the
+  end-of-batch invalid scan. We re-capture once at batch end (skipped on interruption,
+  whose own view is already fresh). One extra daemon capture per batch — cheap, and it
+  buys an honest invalid report. Turns are unaffected (INV-1 is about MODEL turns).
+- **`attach` returns `initialView`.** Default scope `full`, caller-overridable via the
+  bridge_attach `scope` field. Collapses attach + first-view into one model turn — the
+  live run proved the scripted 2-turn baseline was only true if attach returned a view,
+  which it didn't. Additive to `AttachResult`; existing `{sessionId, capabilities}`
+  destructures are untouched.

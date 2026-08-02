@@ -79,6 +79,12 @@ export interface ExtractOptions {
 export interface ElementStateResult {
   found: boolean;
   value?: string;
+  /**
+   * For <select>/combobox: the human-readable label(s) of the selected option(s),
+   * alongside `value` (the option value attribute). Verification accepts a match on
+   * EITHER, so requesting "Oregon" against <option value="OR">Oregon</option> verifies.
+   */
+  selectedLabel?: string;
   checked?: boolean;
   disabled: boolean;
   invalid: boolean;

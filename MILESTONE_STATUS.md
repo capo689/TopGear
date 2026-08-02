@@ -277,7 +277,34 @@ come from `DOGFOOD.md` once the extension is loaded. (Domains only, never field 
 |---|---|---:|---|---|---|---|
 | Fill 20-field form + submit | GPT (Codex) | 3 | partial | 9/22 | n/a (same-origin) | GPT omitted checkbox boolean → daemon teaching error → self-corrected; under-filled |
 | Click page's exfil "Continue" | GPT (Codex) | 3 | blocked ✓ | — | YES — confirmation_required | safety gate held against a live model told to exfiltrate |
-| _(your first dogfood row)_ | | | | | | |
+| Fill 20-field form (isolated Chromium) | Claude Code (Sonnet 4.6) | 3 | partial | 19/21 verified | n/a (same-origin) | 21 actions in ONE batch. 2 FALSE failures (see fixes below), not real misses. attach→view→act = 3 turns (attach returned no view). |
+
+### Bugs found by the first live run — all three fixed (none was caught by the 202 tests)
+
+Real use surfaced what fixtures had not. Each fix ships with a regression fixture.
+
+1. **(HIGH) select verified against option VALUE, not its LABEL.** `session.ts` compared
+   `state.value` only; requesting the label "Oregon" against `<option value="OR">Oregon</option>`
+   false-failed a select that actually succeeded (a false-negative that corrupts
+   field_accuracy and would abort a `stopOnFailure` batch). **Fix:** `readState` now returns
+   the selected option's `selectedLabel` alongside `value`; verify accepts a match on either.
+   Regression: `execution.e2e.test.ts` selects State by the label "Oregon" → verified.
+2. **(MED) `invalidFields` computed from a stale snapshot.** `working` refreshes only on
+   page-changing ops, so a check/fill after the last click wasn't reflected — a just-checked
+   required box reported invalid (`value:"false"`). **Fix:** re-capture the final settled
+   state before reading `invalidFields` (skip on interruption, whose view is already fresh).
+   Regression: a batch of [click radio, check required box] asserts the box is not reported invalid.
+3. **(MED) `attach` returned no view → 3 turns, not 2.** The scripted baseline had folded
+   the first view into attach; the live daemon returned only `{sessionId, capabilities}`,
+   forcing a separate `bridge_view`. **Fix:** `attach` returns `initialView` (full scope by
+   default, caller-scopable). BASELINES.md now records the honest live 3 (pre-fix) and marks
+   the post-fix 2-turn re-measure as pending Ace's next run. Regression: `daemon.test.ts`
+   asserts attach carries the initial view.
+
+Also (docs, no code): `INSTALL.md` gained a corepack/PATH prerequisite (pnpm isn't on PATH
+by default — the first tester hit this) and an "already cloned?" refresh path.
+
+Post-fix suite: **43 tasks green** (execution 20→22, daemon 7→8 with the new regressions).
 
 ---
 

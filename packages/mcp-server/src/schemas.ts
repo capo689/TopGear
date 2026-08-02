@@ -10,7 +10,7 @@ export const ScreenshotRoiSchema = z.discriminatedUnion("kind", [
 ]);
 
 // Raw shapes (ZodRawShape) for MCP tool registration — flat and simple (INV-8).
-export const AttachShape = { grant: TaskGrant, url: z.string().optional() } as const;
+export const AttachShape = { grant: TaskGrant, url: z.string().optional(), scope: ViewScope.optional() } as const;
 export const ViewShape = { sessionId: z.string(), scope: ViewScope } as const;
 export const ActShape = { sessionId: z.string(), batch: ActionBatch } as const;
 export const FillRecordShape = {

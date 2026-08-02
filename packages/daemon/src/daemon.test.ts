@@ -36,6 +36,19 @@ describe("Daemon", () => {
     await daemon.detach(sessionId);
   }, 30_000);
 
+  it("attach returns the initial view, so the first read is not a separate turn (fix #3)", async () => {
+    // Dogfood run measured 3 turns (attach → view → act) because attach returned no view.
+    // attach now returns initialView (full scope by default), restoring the 2-turn path.
+    const attach = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    expect(attach.initialView.trust.pageContent).toBe("untrusted");
+    expect(attach.initialView.elements.length).toBeGreaterThanOrEqual(20);
+    // A caller-supplied scope narrows that same first view.
+    const scoped = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm, scope: { kind: "all_forms" } });
+    expect(scoped.initialView.elements.length).toBeGreaterThanOrEqual(20);
+    await daemon.detach(attach.sessionId);
+    await daemon.detach(scoped.sessionId);
+  }, 30_000);
+
   it("views and acts through the session, enforcing the grant", async () => {
     const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
     const view = await daemon.view(sessionId, { kind: "all_forms" });

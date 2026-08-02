@@ -46,11 +46,19 @@ export interface DaemonOptions {
 export interface AttachRequest {
   grant: TaskGrant;
   url?: string;
+  /** Scope for the initial view returned by attach (defaults to full). */
+  scope?: ViewScope;
 }
 
 export interface AttachResult {
   sessionId: string;
   capabilities: Capabilities;
+  /**
+   * The first SemanticView, captured at attach (field-fix #3). attach already navigates
+   * and captures the page, so returning the view here collapses attach+first-view into a
+   * single model turn instead of forcing a separate bridge_view round-trip.
+   */
+  initialView: SemanticView;
 }
 
 export class UnknownSessionError extends Error {
@@ -106,7 +114,8 @@ export class Daemon {
       },
     });
     this.sessions.set(sessionId, { session, page, capabilities, secrets, grant: req.grant });
-    return { sessionId, capabilities: this.capabilitiesHandshake() };
+    const initialView = await session.view(req.scope ?? { kind: "full" });
+    return { sessionId, capabilities: this.capabilitiesHandshake(), initialView };
   }
 
   private get(sessionId: string): SessionEntry {

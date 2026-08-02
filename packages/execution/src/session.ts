@@ -199,7 +199,12 @@ export class Session {
         ? "partial"
         : "completed";
 
-    const invalidFields = working.elements.filter((e) => e.invalid).map(rawToRecord);
+    // Re-capture the FINAL settled state before reading invalidFields (field-fix #2):
+    // `working` is only refreshed on page-changing ops, so a fill/check/select after the
+    // last click isn't reflected — a just-checked required box would report invalid. On an
+    // interruption the fresh state already lives in the interruption's own view, so skip.
+    const finalView = interruption ? working : await this.capture();
+    const invalidFields = finalView.elements.filter((e) => e.invalid).map(rawToRecord);
     const result: BatchResult = { status, revision: this.revisioner.current, completed, results };
     if (interruption) result.interruption = interruption;
     if (invalidFields.length) result.invalidFields = invalidFields;
@@ -552,8 +557,13 @@ export class Session {
     if (action.op === "select") {
       const state = await page.readState(element.ref);
       const wanted = Array.isArray(action.value) ? action.value : [action.value];
-      const ok = state.value !== undefined && wanted.some((w) => state.value === w || state.value!.includes(w));
-      return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed: state.value ?? "" } };
+      // Accept a match on the option VALUE or its visible LABEL (field-fix #1): the
+      // backend resolves either when selecting, so verifying only against `value`
+      // false-fails a select that actually succeeded (e.g. "Oregon" vs value "OR").
+      const matches = (obs: string | undefined, w: string) => obs !== undefined && (obs === w || obs.includes(w));
+      const ok = wanted.some((w) => matches(state.value, w) || matches(state.selectedLabel, w));
+      const observed = [state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
+      return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed } };
     }
     if (action.op === "set_date") {
       // Real read-back: the input's value must equal the ISO date we set.

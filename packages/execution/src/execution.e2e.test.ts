@@ -95,6 +95,37 @@ describe("M1 acceptance — 20-field form in ONE batch", () => {
   }, 45_000);
 });
 
+describe("R1 field-fixes — first live dogfood run (Ace)", () => {
+  it("select verification matches on the option LABEL, not only its value (fix #1)", async () => {
+    // <option value="OR">Oregon</option>: requesting the visible label "Oregon" must
+    // verify. Pre-fix, verify compared only state.value ("OR") and false-failed a select
+    // that actually succeeded — a false-negative that corrupts field_accuracy.
+    const { session, page } = await makeSession(FIXTURES.nativeForm);
+    const result = await session.act({ actions: [{ op: "select", target: { name: "State" }, value: "Oregon" }] });
+    const r = result.results[0];
+    expect(r?.status, JSON.stringify(r)).toBe("verified");
+    await page.close();
+  }, 30_000);
+
+  it("invalidFields reflects the FINAL state, incl. actions after the last click (fix #2)", async () => {
+    // A page-changing click, then a check of a required box in the SAME batch. Pre-fix,
+    // invalidFields was read from the post-click snapshot (before the check), so the
+    // just-checked required box was reported invalid with value:"false".
+    const { session, page } = await makeSession(FIXTURES.nativeForm);
+    const result = await session.act({
+      actions: [
+        { op: "click", target: { role: "radio", name: "Friend" } },
+        { op: "check", target: { name: "I agree to the terms" }, value: true },
+      ],
+    });
+    const agree = result.results.find((r) => String(r.target).toLowerCase().includes("agree"));
+    expect(agree?.status, JSON.stringify(result.results)).toBe("verified");
+    const staleInvalid = (result.invalidFields ?? []).some((f) => (f.name ?? "").toLowerCase().includes("agree"));
+    expect(staleInvalid, JSON.stringify(result.invalidFields)).toBe(false);
+    await page.close();
+  }, 30_000);
+});
+
 describe("M1 acceptance — dependent select in one batch with an embedded wait", () => {
   it("selects country, waits for the state select to enable, then selects state", async () => {
     const { session, page } = await makeSession(FIXTURES.dependentSelect);
