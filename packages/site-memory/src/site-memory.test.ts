@@ -39,6 +39,16 @@ describe("verifyWidgetHint (INV-3: hints are verified, lying hints fail closed)"
   });
 });
 
+describe("link graph", () => {
+  it("stores and resolves an intent per origin (case-insensitive)", () => {
+    const mem = new InMemorySiteMemory();
+    mem.putLink({ origin: "https://x.com", intent: "Docs", url: "https://x.com/docs" });
+    expect(mem.getLink("https://x.com", "docs")).toBe("https://x.com/docs");
+    expect(mem.getLink("https://other.com", "docs")).toBeUndefined();
+    expect(mem.links()).toHaveLength(1);
+  });
+});
+
 describe("fingerprintKey", () => {
   it("is stable across equal fingerprints", () => {
     const a = fingerprintKey({ role: "combobox", name: "Country", structuralFingerprint: "f/0" });

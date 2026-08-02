@@ -1,7 +1,7 @@
 import type { AttachResult } from "@browser-bridge/daemon";
-import type { SemanticView, BatchResult, ViewScope, ActionBatch, FillRecordRequest, FillRecordResult } from "@browser-bridge/protocol";
+import type { SemanticView, BatchResult, ViewScope, ActionBatch, FillRecordRequest, FillRecordResult, RunPatternRequest, RunPatternResult, HarvestRequest, HarvestResult } from "@browser-bridge/protocol";
 import type { ScreenshotResult, ScreenshotRoi } from "@browser-bridge/backend";
-import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput } from "./schemas.js";
+import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput, RunPatternInput, HarvestInput } from "./schemas.js";
 
 /**
  * The subset of the daemon the MCP tools need. Kept structural so handlers can be
@@ -12,6 +12,8 @@ export interface DaemonLike {
   view(sessionId: string, scope: ViewScope): Promise<SemanticView>;
   act(sessionId: string, batch: ActionBatch): Promise<BatchResult>;
   fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult>;
+  runPattern(sessionId: string, req: RunPatternRequest): Promise<RunPatternResult>;
+  harvest(sessionId: string, req: HarvestRequest): HarvestResult;
   screenshot(sessionId: string, roi: ScreenshotRoi): Promise<ScreenshotResult>;
 }
 
@@ -32,6 +34,18 @@ export function handleFillRecord(daemon: DaemonLike, input: FillRecordInput): Pr
     input.sessionId,
     input.ambiguityPolicy === undefined ? { record: input.record } : { record: input.record, ambiguityPolicy: input.ambiguityPolicy },
   );
+}
+
+export function handleRunPattern(daemon: DaemonLike, input: RunPatternInput): Promise<RunPatternResult> {
+  return daemon.runPattern(input.sessionId, input.budget === undefined ? { urls: input.urls } : { urls: input.urls, budget: input.budget });
+}
+
+export function handleHarvest(daemon: DaemonLike, input: HarvestInput): HarvestResult {
+  const req: HarvestRequest = { mode: input.mode };
+  if (input.query !== undefined) req.query = input.query;
+  if (input.limit !== undefined) req.limit = input.limit;
+  if (input.chunkSize !== undefined) req.chunkSize = input.chunkSize;
+  return daemon.harvest(input.sessionId, req);
 }
 
 export function handleScreenshot(daemon: DaemonLike, input: ScreenshotInput): Promise<ScreenshotResult> {

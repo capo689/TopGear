@@ -26,6 +26,8 @@ const fake: DaemonLike = {
   view: async () => view,
   act: async () => okResult,
   fillRecord: async () => ({ matched: [{ field: "email", target: "Email", confidence: 0.9 }], unmatched: [], ambiguities: [], batch: okResult }),
+  runPattern: async () => ({ requested: 2, harvested: 2, deduped: 0, skipped: [], exceptions: [] }),
+  harvest: () => ({ count: 1, records: [{ url: "https://x/1", title: "A", text: "hi", harvestedAt: 1 }] }),
   screenshot: async () => ({ bytesBase64: "AAAA", contentType: "image/png" }),
 };
 
@@ -74,11 +76,13 @@ describe("handlers dispatch to the daemon", () => {
 });
 
 describe("tool surface", () => {
-  it("exposes exactly the 6 tools shipped through M2, all bridge_-prefixed", () => {
-    expect(TOOL_NAMES).toHaveLength(6);
+  it("exposes exactly the COMPLETE 8 tools, all bridge_-prefixed", () => {
+    expect(TOOL_NAMES).toHaveLength(8);
     expect(TOOL_NAMES.every((n) => n.startsWith("bridge_"))).toBe(true);
-    expect(new Set(TOOL_NAMES).size).toBe(6);
-    expect(TOOL_NAMES).toContain("bridge_fill_record");
+    expect(new Set(TOOL_NAMES).size).toBe(8);
+    expect(TOOL_NAMES).toEqual(
+      expect.arrayContaining(["bridge_fill_record", "bridge_run_pattern", "bridge_harvest"]),
+    );
   });
 
   it("constructs an MCP server over a daemon", () => {

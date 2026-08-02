@@ -1,4 +1,4 @@
-import { chromium, type Browser, type Page, type Locator } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page, type Locator } from "playwright";
 import { randomUUID } from "node:crypto";
 import type { WaitCondition, PageCondition } from "@browser-bridge/protocol";
 import type {
@@ -48,7 +48,11 @@ function matchState(state: ElementStateResult, want: string): boolean {
 class PlaywrightPage implements BrowserPage {
   readonly pageId = randomUUID();
 
-  constructor(private readonly page: Page) {}
+  /** In isolated mode `context` is a disposable profile closed with the page. */
+  constructor(
+    private readonly page: Page,
+    private readonly context?: BrowserContext,
+  ) {}
 
   private loc(ref: string): Locator {
     return this.page.locator(`[data-bb-ref="${ref}"]`);
@@ -254,19 +258,30 @@ class PlaywrightPage implements BrowserPage {
 
   async close(): Promise<void> {
     await this.page.close();
+    if (this.context) await this.context.close();
   }
 }
 
 export interface PlaywrightBackendOptions {
   headless?: boolean;
+  /** Isolated mode: each attach gets a fresh, disposable browser context (plan §2). */
+  isolated?: boolean;
 }
 
 class PlaywrightBackend implements BrowserBackend {
-  constructor(private readonly browser: Browser) {}
+  constructor(
+    private readonly browser: Browser,
+    private readonly isolated: boolean,
+  ) {}
 
   async attach(url?: string): Promise<BrowserPage> {
-    const page = await this.browser.newPage();
-    const wrapped = new PlaywrightPage(page);
+    let wrapped: PlaywrightPage;
+    if (this.isolated) {
+      const context = await this.browser.newContext();
+      wrapped = new PlaywrightPage(await context.newPage(), context);
+    } else {
+      wrapped = new PlaywrightPage(await this.browser.newPage());
+    }
     if (url) await wrapped.goto(url);
     return wrapped;
   }
@@ -276,8 +291,9 @@ class PlaywrightBackend implements BrowserBackend {
   }
 }
 
-/** Launch an isolated Chromium and return a BrowserBackend over it. */
+/** Launch a Chromium and return a BrowserBackend. `isolated` gives each attach a fresh
+ *  disposable profile (bulk/unattended); default shares one context (attach/profile). */
 export async function createPlaywrightBackend(options: PlaywrightBackendOptions = {}): Promise<BrowserBackend> {
   const browser = await chromium.launch({ headless: options.headless ?? true });
-  return new PlaywrightBackend(browser);
+  return new PlaywrightBackend(browser, options.isolated ?? false);
 }

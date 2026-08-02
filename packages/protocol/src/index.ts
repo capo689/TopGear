@@ -15,5 +15,6 @@ export * from "./action.js";
 export * from "./grant.js";
 export * from "./result.js";
 export * from "./fill-record.js";
+export * from "./run-pattern.js";
 export * from "./envelope.js";
 export * from "./capabilities.js";

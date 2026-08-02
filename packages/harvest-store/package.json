@@ -1,0 +1,23 @@
+{
+  "name": "@browser-bridge/harvest-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Harvested corpora + full-text search. Class A — never leaves the machine, never auto-enters model context.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist *.tsbuildinfo"
+  }
+}

@@ -13,7 +13,8 @@ const sink = new MemorySink();
 beforeAll(async () => {
   farm = await startFixtureFarm();
   const backend = await createPlaywrightBackend({ headless: true });
-  daemon = new Daemon({ backend, auditSink: sink });
+  const harvestBackend = await createPlaywrightBackend({ headless: true, isolated: true });
+  daemon = new Daemon({ backend, harvestBackend, auditSink: sink });
   origin = new URL(farm.url).origin;
 }, 60_000);
 
@@ -80,4 +81,30 @@ describe("Daemon", () => {
   it("never writes raw field values to the audit sink", () => {
     expect(sink.lines.join("\n")).not.toContain("ada@example.com");
   });
+
+  it("resolves goto_intent from the recorded link graph, re-checking the origin", async () => {
+    const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    daemon.recordLink(sessionId, "form2", farm.url + FIXTURES.dependentSelect);
+    const result = await daemon.act(sessionId, { actions: [{ op: "goto_intent", intent: "form2" }] });
+    expect(result.results[0]?.status).toBe("verified");
+    await daemon.detach(sessionId);
+  }, 30_000);
+
+  it("runs a harvest pattern and serves the corpus back via bridge_harvest (§8)", async () => {
+    const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+    const urls = Array.from({ length: 12 }, (_, i) => `${farm.url}/harvest/${i + 1}`);
+    const run = await daemon.runPattern(sessionId, { urls });
+    expect(run.harvested).toBe(12);
+    expect(run.exceptions).toHaveLength(0);
+
+    const search = daemon.harvest(sessionId, { mode: "search", query: "gadget" });
+    expect(search.count).toBeGreaterThan(0);
+    expect(search.records?.[0]?.text).toBeDefined();
+
+    const list = daemon.harvest(sessionId, { mode: "list" });
+    expect(list.count).toBe(12);
+    // list is metadata-only — no full text.
+    expect(list.records?.[0]?.text).toBeUndefined();
+    await daemon.detach(sessionId);
+  }, 45_000);
 });

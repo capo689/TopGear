@@ -22,10 +22,13 @@ packages/
   backend/           The BrowserBackend contract the execution engine drives
   browser-playwright/ CDP/Playwright backend implementation
   locators/          Fingerprint scoring, re-resolution, ambiguity arbitration
-  widget-patterns/   Widget playbooks (native + custom combobox)
+  widget-patterns/   Widget playbooks (native, custom combobox, typeahead)
   execution/         Batch engine: resolve → authorize → act → verify → audit
+  scheduler/         Global + per-origin governors, grant budgets (INV-7)
+  harvest-store/     Harvested corpora + search (Class A, local only)
+  pattern-runner/    Parallel harvest loops + crawl policy (robots, budgets)
   daemon/            Session registry + gateway; binds grants, capability handshake
-  mcp-server/        MCP surface: the 5 M1 tools over the daemon
+  mcp-server/        MCP surface: the complete 8 tools over the daemon
   relay/             Extension relay contract; Zod-validated at every hop
   site-memory/       Per-origin widget cache; patterns are hints, verified live (INV-3)
   contribution/      Class A/B/C classifier, anonymize, sign, telemetry, viewer, kill switch

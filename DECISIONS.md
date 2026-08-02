@@ -117,8 +117,28 @@ section first. Dates are absolute.
 - **Fable M1 findings folded:** real read-back for click/set_date/expand (#1), two
   M5-inherited `it.fails` fixtures (#2), CI Chromium install step (#3).
 
-### M3 inbox — Fable R1 review finding (fold FIRST in M3)
-- **Auth tri-state (R1 finding):** the classifier must treat `authenticated` as a
-  tri-state — `true` OR **absent/unknown** → Class B, never contributed. Only an
-  explicitly-confirmed unauthenticated public origin is eligible for Class C. Then re-run
-  real pattern-runner extraction output back through `runClassificationAudit`.
+### M3 inbox — Fable R1 review finding (folded in M3)
+- **Auth tri-state (R1 finding):** DONE — the classifier treats `authStatus` as a
+  tri-state; `authenticated` OR absent/unknown → Class B. Only an explicitly-unauthenticated
+  public origin is Class C. Real pattern-runner output re-run through
+  `runClassificationAudit` (0 leaks, private origin withheld).
+
+### M3 build choices (2026-08-01)
+- **Scheduler** is a two-level semaphore governor (global + per-origin) with FIFO
+  hand-off; grant budgets (maxPages/maxDownloadBytes) throw `BudgetExhaustedError`;
+  exponential backoff has an injectable sleep for deterministic tests. Profile mode clamps
+  per-origin to ≤ 2 and refuses bulk.
+- **Isolated mode** = a fresh Playwright `BrowserContext` per attach (disposable profile),
+  closed with the page. Default attach shares one context (profile mode).
+- **Crawl policy** enforces the grant's origin allowlist (covering auth walls: reach them
+  only if named) + robots for unauthenticated crawling. The daemon uses the origin
+  allowlist; per-origin robots fetching is proven in the runner but not auto-fetched by the
+  daemon yet.
+- **harvest-store is in-memory** (dedupe by url+content-hash, tokenized TF search, chunked
+  export). Class A content is local-only; better-sqlite3 + FTS5 sits behind the same
+  interface (same deviation as site-memory).
+- **goto_intent** resolves via the site-memory link graph (a HINT, INV-3) and the resolved
+  URL passes the SAME destination-origin grant check as a literal goto (Fable M0 #1).
+- **8-tool surface complete:** `bridge_run_pattern` + `bridge_harvest` added. No ninth tool.
+- **Bonus fix:** `click` refuses a disabled element (backend precheck) — surfaced by the
+  widget gauntlet.

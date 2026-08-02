@@ -248,6 +248,48 @@ describe("M2 acceptance — consent-aware reflex ('Accept all' never auto-clicke
   }, 30_000);
 });
 
+describe("M3 — goto_intent resolves via link graph and RE-CHECKS the origin (Fable M0 #1)", () => {
+  async function sessionWithIntent(startRoute: string, map: Record<string, string>) {
+    const page = await backend.attach(farm.url + startRoute);
+    const session = new Session({
+      sessionId: "s-intent",
+      page,
+      grant: grantFor(["low", "medium"]),
+      capabilities: new CapabilityStore(systemClock),
+      audit: new AuditLogger(new MemorySink()).child(newCorrelationId()),
+      secrets: new InMemorySecretBroker(),
+      clock: systemClock,
+      resolveIntent: (_current, intent) => map[intent],
+    });
+    return { session, page };
+  }
+
+  it("navigates a resolved SAME-origin intent", async () => {
+    const { session, page } = await sessionWithIntent(FIXTURES.nativeForm, { deps: farm.url + FIXTURES.dependentSelect });
+    const result = await session.act({ actions: [{ op: "goto_intent", intent: "deps" }] });
+    expect(result.results[0]?.status).toBe("verified");
+    expect(page.url()).toContain("dependent-select");
+    await page.close();
+  }, 30_000);
+
+  it("DENIES a resolved CROSS-origin intent — the resolved origin passes the grant check", async () => {
+    const { session, page } = await sessionWithIntent(FIXTURES.nativeForm, { partner: "https://other.example/dashboard" });
+    const result = await session.act({ actions: [{ op: "goto_intent", intent: "partner" }] });
+    const failure = result.results[0]?.failure;
+    expect(failure?.reason).toBe("grant_denied");
+    if (failure?.reason === "grant_denied") expect(failure.needed.origin).toBe("https://other.example");
+    expect(page.url()).toContain("native-form"); // did not navigate
+    await page.close();
+  }, 30_000);
+
+  it("surfaces an unresolved intent (no guessing)", async () => {
+    const { session, page } = await sessionWithIntent(FIXTURES.nativeForm, {});
+    const result = await session.act({ actions: [{ op: "goto_intent", intent: "nowhere" }] });
+    expect(result.results[0]?.failure?.reason).toBe("widget_unrecognized");
+    await page.close();
+  }, 30_000);
+});
+
 describe("M5-inherited security fixtures (expected-fail until M5)", () => {
   it.fails("should gate a bland/icon-only destructive control", async () => {
     const { session, page } = await makeSession(FIXTURES.blandDestructive);

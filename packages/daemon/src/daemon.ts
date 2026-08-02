@@ -10,11 +10,20 @@ import {
   type ConfirmationCapability,
   type FillRecordRequest,
   type FillRecordResult,
+  type RunPatternRequest,
+  type RunPatternResult,
+  type HarvestRequest,
+  type HarvestResult,
+  type HarvestRecordDTO,
 } from "@browser-bridge/protocol";
 import { CapabilityStore, systemClock, type Clock } from "@browser-bridge/policy";
 import { AuditLogger, stdoutSink, type AuditSink } from "@browser-bridge/audit";
 import { InMemorySecretBroker } from "@browser-bridge/secrets";
 import { Session, BatchCapError } from "@browser-bridge/execution";
+import { Scheduler, TaskBudget } from "@browser-bridge/scheduler";
+import { InMemoryHarvestStore, type HarvestRecord } from "@browser-bridge/harvest-store";
+import { PatternRunner, CrawlPolicy } from "@browser-bridge/pattern-runner";
+import { InMemorySiteMemory } from "@browser-bridge/site-memory";
 import type { BrowserBackend, BrowserPage, ScreenshotRoi, ScreenshotResult } from "@browser-bridge/backend";
 
 interface SessionEntry {
@@ -27,8 +36,11 @@ interface SessionEntry {
 
 export interface DaemonOptions {
   backend: BrowserBackend;
+  /** Isolated backend for bulk harvest (plan §8). If absent, run_pattern is unavailable. */
+  harvestBackend?: BrowserBackend;
   clock?: Clock;
   auditSink?: AuditSink;
+  scheduler?: Scheduler;
 }
 
 export interface AttachRequest {
@@ -57,10 +69,14 @@ export class Daemon {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly clock: Clock;
   private readonly auditSink: AuditSink;
+  private readonly harvestStore = new InMemoryHarvestStore();
+  private readonly siteMemory = new InMemorySiteMemory();
+  private readonly scheduler: Scheduler;
 
   constructor(private readonly opts: DaemonOptions) {
     this.clock = opts.clock ?? systemClock;
     this.auditSink = opts.auditSink ?? stdoutSink;
+    this.scheduler = opts.scheduler ?? new Scheduler({ maxGlobalConcurrency: 3, perOriginConcurrency: 3 });
   }
 
   private capabilitiesHandshake(): Capabilities {
@@ -73,7 +89,22 @@ export class Daemon {
     const capabilities = new CapabilityStore(this.clock);
     const secrets = new InMemorySecretBroker();
     const audit = new AuditLogger(this.auditSink, this.clock).child(sessionId);
-    const session = new Session({ sessionId, page, grant: req.grant, capabilities, audit, secrets, clock: this.clock });
+    const session = new Session({
+      sessionId,
+      page,
+      grant: req.grant,
+      capabilities,
+      audit,
+      secrets,
+      clock: this.clock,
+      resolveIntent: (currentUrl, intent) => {
+        try {
+          return this.siteMemory.getLink(new URL(currentUrl).origin, intent);
+        } catch {
+          return undefined;
+        }
+      },
+    });
     this.sessions.set(sessionId, { session, page, capabilities, secrets, grant: req.grant });
     return { sessionId, capabilities: this.capabilitiesHandshake() };
   }
@@ -113,6 +144,41 @@ export class Daemon {
     return this.get(sessionId).page.screenshot(roi);
   }
 
+  /** `bridge_run_pattern`: harvest URLs under the session's grant + crawl policy (§8). */
+  async runPattern(sessionId: string, req: RunPatternRequest): Promise<RunPatternResult> {
+    const entry = this.get(sessionId);
+    if (!this.opts.harvestBackend) {
+      throw new Error("harvest unavailable: no isolated backend configured");
+    }
+    const crawl = new CrawlPolicy({ allowedOrigins: entry.grant.allowedOrigins });
+    const budget = new TaskBudget({
+      ...(req.budget?.maxPages !== undefined ? { maxPages: req.budget.maxPages } : entry.grant.budgets.maxPages !== undefined ? { maxPages: entry.grant.budgets.maxPages } : {}),
+      ...(req.budget?.maxDownloadBytes !== undefined ? { maxDownloadBytes: req.budget.maxDownloadBytes } : {}),
+    });
+    const runner = new PatternRunner({ backend: this.opts.harvestBackend, scheduler: this.scheduler, store: this.harvestStore, crawl, budget });
+    return runner.run({ urls: req.urls });
+  }
+
+  /** `bridge_harvest`: query the local Class A corpus (content stays on the machine). */
+  harvest(_sessionId: string, req: HarvestRequest): HarvestResult {
+    const toDTO = (r: HarvestRecord, withText: boolean): HarvestRecordDTO => ({
+      url: r.url,
+      ...(r.title !== undefined ? { title: r.title } : {}),
+      ...(withText ? { text: r.text } : {}),
+      harvestedAt: r.harvestedAt,
+    });
+    if (req.mode === "search") {
+      const results = this.harvestStore.search(req.query ?? "", req.limit);
+      return { count: results.length, records: results.map((x) => toDTO(x.record, true)) };
+    }
+    if (req.mode === "export") {
+      const chunks = this.harvestStore.exportChunks(req.chunkSize ?? 20);
+      return { count: this.harvestStore.count(), chunks: chunks.map((c) => c.map((r) => toDTO(r, true))) };
+    }
+    // list: metadata only, no full text
+    return { count: this.harvestStore.count(), records: this.harvestStore.list().map((r) => toDTO(r, false)) };
+  }
+
   /**
    * `bridge_confirm`: surface pending confirmations to the confirm UI. It cannot
    * describe or create a confirmation — only request the UI show what the daemon built.
@@ -131,6 +197,11 @@ export class Daemon {
   /** Provision a secret value out-of-band (human-types fallback for M1). */
   setSecret(sessionId: string, ref: string, value: string): void {
     this.get(sessionId).secrets.set(ref, value);
+  }
+
+  /** Record a link-graph hint so goto_intent can resolve it (its origin is re-checked). */
+  recordLink(sessionId: string, intent: string, url: string): void {
+    this.siteMemory.putLink({ origin: this.get(sessionId).page.origin(), intent, url });
   }
 
   async detach(sessionId: string): Promise<void> {

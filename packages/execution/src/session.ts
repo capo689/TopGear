@@ -63,6 +63,8 @@ export interface SessionDeps {
   clock: Clock;
   confirmationTtlMs?: number;
   reflexConfig?: ReflexConfig;
+  /** Resolve a goto_intent to a URL via the site-memory link graph (INV-3: verified). */
+  resolveIntent?: (currentUrl: string, intent: string) => string | undefined;
 }
 
 function toScopeInput(scope: ViewScope): ScopeInput {
@@ -346,18 +348,27 @@ export class Session {
   }
 
   private async executeGoto(action: Extract<Action, { op: "goto" } | { op: "goto_intent" }>): Promise<StepOutcome> {
-    // goto_intent has no real resolution in M1 (link graph is M3); treat the literal
-    // intent as unavailable rather than guessing.
+    let url: string;
+    let label: string;
     if (action.op === "goto_intent") {
-      return { results: [{ target: "goto_intent", status: "failed", failure: { reason: "widget_unrecognized", widgetHint: "goto_intent" } }] };
+      // Resolve via the link graph (a hint, INV-3). Unresolved → surface, never guess.
+      const resolved = this.deps.resolveIntent?.(this.deps.page.url(), action.intent);
+      if (!resolved) {
+        return { results: [{ target: "goto_intent", status: "failed", failure: { reason: "widget_unrecognized", widgetHint: "goto_intent (unresolved)" } }] };
+      }
+      url = resolved;
+      label = `${action.intent} → ${resolved}`;
+    } else {
+      url = action.url;
+      label = action.url;
     }
-    const toOrigin = safeOrigin(action.url);
-    // The DESTINATION origin must be inside the grant — navigating off the allowed
-    // origins is a grant-escape, gated with a teaching error (plan §4.5).
+    const toOrigin = safeOrigin(url);
+    // The RESOLVED destination origin passes the SAME new-origin grant check as a literal
+    // goto (Fable M0 #1): a goto_intent cannot navigate off the granted origins.
     if (toOrigin && !originAllowed(this.deps.grant, toOrigin)) {
       const failure: FailureDetail = { reason: "grant_denied", needed: { origin: toOrigin } };
-      this.audit("goto", action.url, "goto_origin_not_allowed", "deny", failure);
-      return { results: [{ target: action.url, status: "failed", failure }] };
+      this.audit(action.op, label, "goto_origin_not_allowed", "deny", failure);
+      return { results: [{ target: label, status: "failed", failure }] };
     }
     const gotoCtx: GotoContext = { fromOrigin: this.deps.page.origin(), toOrigin };
     const ctx: ActionExecContext = {
@@ -367,17 +378,18 @@ export class Session {
       risk: { goto: gotoCtx },
       normalize: { origin: this.deps.page.origin() },
     };
-    const authz = authorize({ action, grant: this.deps.grant, ctx, capabilities: this.deps.capabilities });
+    const gotoAction: Action = { op: "goto", url };
+    const authz = authorize({ action: gotoAction, grant: this.deps.grant, ctx, capabilities: this.deps.capabilities });
     if (authz.decision === "deny") {
-      this.audit(action.op, undefined, authz.audit.code, "deny", authz.failure);
-      return { results: [{ target: action.url, status: "failed", failure: authz.failure }] };
+      this.audit(action.op, label, authz.audit.code, "deny", authz.failure);
+      return { results: [{ target: label, status: "failed", failure: authz.failure }] };
     }
     if (authz.decision === "needs_confirmation") {
-      return this.confirmationStep(action.op, action.url, authz);
+      return this.confirmationStep(action.op, label, authz);
     }
-    await this.deps.page.goto(action.url);
-    this.audit(action.op, action.url, authz.audit.code, "verified");
-    return { results: [{ target: action.url, status: "verified" }], pageChanged: true };
+    await this.deps.page.goto(url);
+    this.audit(action.op, label, authz.audit.code, "verified");
+    return { results: [{ target: label, status: "verified" }], pageChanged: true };
   }
 
   private async executeTargeted(action: Action, element: RawElement, working: RawView): Promise<StepOutcome> {

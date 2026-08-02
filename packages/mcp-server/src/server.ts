@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SCHEMA_VERSION } from "@browser-bridge/protocol";
-import { AttachShape, ViewShape, ActShape, FillRecordShape, ScreenshotShape, ConfirmShape } from "./schemas.js";
-import type { AttachInput, ViewInput, ActInput, FillRecordInput, ScreenshotInput } from "./schemas.js";
-import { handleAttach, handleView, handleAct, handleFillRecord, handleScreenshot, handleConfirm, type DaemonLike } from "./handlers.js";
+import { AttachShape, ViewShape, ActShape, FillRecordShape, RunPatternShape, HarvestShape, ScreenshotShape, ConfirmShape } from "./schemas.js";
+import type { AttachInput, ViewInput, ActInput, FillRecordInput, RunPatternInput, HarvestInput, ScreenshotInput } from "./schemas.js";
+import { handleAttach, handleView, handleAct, handleFillRecord, handleRunPattern, handleHarvest, handleScreenshot, handleConfirm, type DaemonLike } from "./handlers.js";
 
 function jsonContent(obj: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(obj) }] };
@@ -35,6 +35,16 @@ export function createMcpServer(daemon: DaemonLike): McpServer {
     "bridge_fill_record",
     { description: "Fill a form from a structured record in one call — deterministic field matching, 0 mid-form turns.", inputSchema: FillRecordShape as never },
     (async (args: FillRecordInput) => jsonContent(await handleFillRecord(daemon, args))) as never,
+  );
+  server.registerTool(
+    "bridge_run_pattern",
+    { description: "Harvest many URLs in parallel under the grant + crawl policy; content goes to the local store.", inputSchema: RunPatternShape as never },
+    (async (args: RunPatternInput) => jsonContent(await handleRunPattern(daemon, args))) as never,
+  );
+  server.registerTool(
+    "bridge_harvest",
+    { description: "Query the local harvested corpus: search | list | chunked export. Content stays on the machine.", inputSchema: HarvestShape as never },
+    (async (args: HarvestInput) => jsonContent(handleHarvest(daemon, args))) as never,
   );
   server.registerTool(
     "bridge_screenshot",

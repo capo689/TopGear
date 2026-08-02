@@ -121,15 +121,27 @@ importers:
       '@browser-bridge/execution':
         specifier: workspace:*
         version: link:../execution
+      '@browser-bridge/harvest-store':
+        specifier: workspace:*
+        version: link:../harvest-store
+      '@browser-bridge/pattern-runner':
+        specifier: workspace:*
+        version: link:../pattern-runner
       '@browser-bridge/policy':
         specifier: workspace:*
         version: link:../policy
       '@browser-bridge/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@browser-bridge/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
       '@browser-bridge/secrets':
         specifier: workspace:*
         version: link:../secrets
+      '@browser-bridge/site-memory':
+        specifier: workspace:*
+        version: link:../site-memory
     devDependencies:
       '@browser-bridge/browser-playwright':
         specifier: workspace:*
@@ -174,6 +186,8 @@ importers:
         specifier: workspace:*
         version: link:../../apps/fixture-farm
 
+  packages/harvest-store: {}
+
   packages/locators:
     dependencies:
       '@browser-bridge/protocol':
@@ -204,6 +218,28 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  packages/pattern-runner:
+    dependencies:
+      '@browser-bridge/backend':
+        specifier: workspace:*
+        version: link:../backend
+      '@browser-bridge/harvest-store':
+        specifier: workspace:*
+        version: link:../harvest-store
+      '@browser-bridge/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
+    devDependencies:
+      '@browser-bridge/browser-playwright':
+        specifier: workspace:*
+        version: link:../browser-playwright
+      '@browser-bridge/contribution':
+        specifier: workspace:*
+        version: link:../contribution
+      '@browser-bridge/fixture-farm':
+        specifier: workspace:*
+        version: link:../../apps/fixture-farm
+
   packages/policy:
     dependencies:
       '@browser-bridge/protocol':
@@ -224,6 +260,8 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+
+  packages/scheduler: {}
 
   packages/secrets: {}
 

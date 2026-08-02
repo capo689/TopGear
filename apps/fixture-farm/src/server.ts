@@ -29,6 +29,25 @@ export interface FixtureFarmOptions {
   host?: string;
 }
 
+/** Dynamic harvest routes: `/harvest/<n>` synthetic pages and `/robots.txt`. */
+function dynamicRoute(pathname: string): { contentType: string; body: string } | null {
+  if (pathname === "/robots.txt") {
+    return { contentType: "text/plain; charset=utf-8", body: "User-agent: *\nDisallow: /harvest/secret\n" };
+  }
+  const harvest = pathname.match(/^\/harvest\/(\d+)$/);
+  if (harvest) {
+    const n = harvest[1];
+    return {
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Harvest ${n}</title></head><body><main><article><h1>Item ${n}</h1><p>Widget number ${n} costs $${n}. Harvest content for page ${n} with searchable gadget text.</p></article></main></body></html>`,
+    };
+  }
+  if (pathname === "/harvest/secret") {
+    return { contentType: "text/html; charset=utf-8", body: "<!doctype html><title>Secret</title><p>disallowed by robots</p>" };
+  }
+  return null;
+}
+
 function resolveFile(urlPath: string): string | null {
   const clean = decodeURIComponent(urlPath.split("?")[0] ?? "/");
   let rel = normalize(clean);
@@ -55,6 +74,13 @@ export function startFixtureFarm(options: FixtureFarmOptions = {}): Promise<Fixt
   const host = options.host ?? "127.0.0.1";
 
   const server = createServer((req, res) => {
+    // Dynamic routes for the harvest gauntlet (§8): N synthetic pages + a robots.txt.
+    const dynamic = dynamicRoute(decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/"));
+    if (dynamic) {
+      res.writeHead(200, { "content-type": dynamic.contentType, "cache-control": "no-store" });
+      res.end(dynamic.body);
+      return;
+    }
     const target = resolveFile(req.url ?? "/");
     if (target === null) {
       res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });

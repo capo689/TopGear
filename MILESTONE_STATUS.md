@@ -176,6 +176,56 @@ The full 8-workflow × multi-vendor matrix is M6; these are the seed rows.
 
 ---
 
-## M3 — Reading at scale — NOT STARTED
+## M3 — Reading at scale — COMPLETE (pending external review) → R1.5
 
-Blocked on M2 external review. Two credential items come due at this boundary (below).
+**Release target:** R1.5. **Built on:** 2026-08-01. M2 gate: PASS (Fable, R1).
+
+### R1 finding folded FIRST (per instruction)
+
+- **Auth tri-state:** the classifier now treats `authStatus` as tri-state — authenticated
+  OR unknown/absent → Class B; only an explicitly-unauthenticated public origin is
+  Class C. Verified in `classify.test.ts` + a public-but-unknown-auth withheld case.
+- **Audit re-run on real output:** `pattern-runner/src/audit-integration.test.ts` harvests
+  real pages, derives structural candidates, and runs them through `runClassificationAudit`
+  — 0 leaks, the private (127.0.0.1) origin contributes nothing, harvested content never
+  appears in a contribution.
+
+### Acceptance criteria
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| 50-page harvest ≤ 4 turns, ≤ 1.5× raw parallel at concurrency 3 | ✅ VERIFIED | `pattern-runner/src/runner.e2e.test.ts`: 50 pages harvested in ~1.3s at concurrency 3; the model spends ≤4 turns (define pattern → run → query). |
+| Drift at a page recovers in 1 extra turn | ✅ VERIFIED | A dead URL surfaces in `exceptions` with its URL — re-runnable in one turn; the rest still harvest. |
+| Global governor holds ceilings under a 100-origin runaway | ✅ VERIFIED | `scheduler.test.ts`: peak concurrency ≤ 6 across 100 distinct origins hammered at once. |
+| Per-origin caps hold under 10 competing agents | ✅ VERIFIED | `scheduler.test.ts`: peak ≤ 3 for 10 tasks on one origin. |
+| Profile-mode bulk refused by default | ✅ VERIFIED | per-origin clamps to ≤ 2 and `assertBulkAllowed()` throws in profile mode. |
+| Robots fixture honored | ✅ VERIFIED | `/robots.txt` `Disallow: /harvest/secret` → the secret page is skipped (`robots_disallow`). |
+| goto_intent + origin re-check (Fable M0 #1) | ✅ VERIFIED | resolved intent runs the SAME destination-origin grant check; a cross-origin resolution is `grant_denied`, does not navigate. |
+| 8-tool surface complete | ✅ VERIFIED | `bridge_run_pattern` + `bridge_harvest` wired; `TOOL_NAMES` is exactly the 8. |
+
+### What was built
+
+scheduler (global + per-origin governors, grant budgets, backoff) · isolated Playwright mode · crawl policy (robots, origin/auth-wall, budgets) · harvest store (Class A, dedupe by url+hash, FTS-style search, chunked export) · pattern runner (parallel harvest through the scheduler; misses → exceptions) · `bridge_run_pattern` + `bridge_harvest` (completing the 8 tools) · goto_intent + site-memory link graph + origin re-check · pattern-runner → classification-audit integration.
+
+### Test tally
+
+**190 tests, all green.** New in M3: scheduler 8, harvest-store 3, pattern-runner 9 (crawl + 50-page harvest + audit integration), plus additions to site-memory, daemon, mcp-server (8 tools), execution (goto_intent), and contribution (tri-state).
+
+### Known gaps / honest notes (Q9)
+
+1. **Live GPT harvest not run** — the live cross-vendor tier so far is the form + injection workflows; the 50-page harvest is verified scripted-over-real-stack (daemon E2E), not yet via a live model. A worthwhile M6 matrix addition.
+2. **site-memory + harvest-store are in-memory** — better-sqlite3 (+FTS5) sits behind the same interfaces (the standing deviation, in DECISIONS). Class A content is local-only regardless.
+3. **Daemon crawl policy uses the origin allowlist**; per-origin robots *fetching* is exercised in the runner tests but the daemon does not auto-fetch robots yet (enforced when configured). Small addition.
+4. **Extension live load / daemon socket listener** — unchanged from M1 (flagged).
+
+### Reviewer notes (for Fable)
+
+- Highest scrutiny: the scheduler (concurrency correctness under load — the peak-tracking tests) and the crawl policy (auth-wall / out-of-grant refusal).
+- Confirm no path lets a resolved `goto_intent` escape the grant (origin re-check).
+- Confirm the auth tri-state classifies unknown/absent → B everywhere, and that harvested content (Class A) has no path into a contribution.
+
+---
+
+## M4 — Replay and Commons serving — NOT STARTED (field-data gated)
+
+Blocked on M3 external review AND on R1/R1.5 field data (plan forbids faking M4's gate).
