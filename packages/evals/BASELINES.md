@@ -64,5 +64,10 @@ this row will record the measured number, not an asserted one:
 
 | Workflow | tier | measured turns | note |
 |---|---|---:|---|
-| fill-native-form | live (pre-fix) | 3 | attach returned no view |
-| fill-native-form | live (post-fix) | _pending re-measure_ | attach now returns initialView |
+| fill-native-form | live (pre-fix) | 3 | attach returned no view (19/21 verified, 2 false failures) |
+| fill-native-form | live (post-fix) | 2 | measured, Sonnet 4.6 via Claude Code — attach + act, 21/21 verified, 0 failures |
+
+The post-fix live number **matches the scripted baseline of 2** — the scripted model is now
+faithful to real behavior. The run also confirmed all three field-fixes by live behavior:
+the model explicitly recognized `initialView` and skipped `bridge_view` unprompted;
+label-based selects verified; no phantom `invalidFields`.

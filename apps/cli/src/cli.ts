@@ -4,6 +4,7 @@ import { homedir, platform as osPlatform } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { connect } from "node:net";
+import { spawnSync } from "node:child_process";
 import { runDoctorChecks, renderDoctor, summarize, type DoctorEnv } from "./doctor.js";
 
 const here = dirname(fileURLToPath(import.meta.url)); // apps/cli/dist
@@ -31,6 +32,18 @@ function nativeHostRegistered(): boolean {
   return dir ? existsSync(join(dir, "com.browser_bridge.shim.json")) : false;
 }
 
+function pnpmOnPath(): boolean {
+  // Resolve pnpm exactly the way turbo's child processes do: as a PATH binary. A shell
+  // function or `corepack pnpm` alias does NOT count — spawnSync bare-command resolution
+  // mirrors what the build actually needs. ENOENT (not found) → false.
+  try {
+    const r = spawnSync("pnpm", ["--version"], { encoding: "utf8", timeout: 5000 });
+    return r.status === 0 && !r.error;
+  } catch {
+    return false;
+  }
+}
+
 function socketReachable(path: string): Promise<boolean> {
   return new Promise((res) => {
     const sock = connect(path);
@@ -50,6 +63,7 @@ async function doctor(): Promise<void> {
     nodeVersion: process.version,
     platform: process.platform,
     hasChromium: chromiumPresent(),
+    pnpmOnPath: pnpmOnPath(),
     socketReachable: await socketReachable(socketPath),
     extensionBuilt: extensionBuilt(),
     nativeHostRegistered: nativeHostRegistered(),

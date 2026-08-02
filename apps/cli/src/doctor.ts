@@ -8,11 +8,25 @@ export interface DoctorEnv {
   platform: string; // process.platform
   hasChromium: boolean;
   socketReachable: boolean;
+  /**
+   * `pnpm` resolves as a PATH binary (spawnSync('pnpm') succeeds). A HARD prerequisite:
+   * turbo spawns `pnpm` in child processes, so the repo cannot build without it — and
+   * `corepack pnpm build` does NOT satisfy that (pnpm must be PATH-resolvable itself).
+   */
+  pnpmOnPath: boolean;
   /** Extension bundled to apps/extension/dist (load-unpacked ready). */
   extensionBuilt: boolean;
   /** Native-messaging host manifest registered with Chrome. */
   nativeHostRegistered: boolean;
 }
+
+/**
+ * The exact remediation when pnpm isn't on PATH — including the /usr/local Node case
+ * where plain `corepack enable` fails EACCES (finding #4, first dogfood rebuild).
+ */
+export const PNPM_FIX =
+  'corepack enable  (if it fails EACCES because Node is in /usr/local: ' +
+  'corepack enable --install-directory "$HOME/.local/bin" && export PATH="$HOME/.local/bin:$PATH")';
 
 export type CheckStatus = "ok" | "warn" | "fail";
 
@@ -40,6 +54,12 @@ export function runDoctorChecks(env: DoctorEnv): DoctorCheck[] {
     name: "platform",
     status: ["darwin", "linux", "win32"].includes(env.platform) ? "ok" : "warn",
     detail: env.platform,
+  });
+
+  checks.push({
+    name: "pnpm",
+    status: env.pnpmOnPath ? "ok" : "fail",
+    detail: env.pnpmOnPath ? "pnpm resolves on PATH (turbo can build)" : `pnpm NOT on PATH — turbo cannot build. Fix: ${PNPM_FIX}`,
   });
 
   checks.push({

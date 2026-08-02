@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { runDoctorChecks, summarize, renderDoctor, type DoctorEnv } from "./doctor.js";
+import { runDoctorChecks, summarize, renderDoctor, PNPM_FIX, type DoctorEnv } from "./doctor.js";
 
 const base: DoctorEnv = {
   nodeVersion: "v24.14.1",
   platform: "darwin",
   hasChromium: true,
+  pnpmOnPath: true,
   socketReachable: true,
   extensionBuilt: true,
   nativeHostRegistered: true,
@@ -22,6 +23,16 @@ describe("runDoctorChecks", () => {
     expect(ok).toBe(false);
     expect(failed).toContain("node");
     expect(failed).toContain("chromium");
+  });
+
+  it("HARD-fails when pnpm is not on PATH and prints the --install-directory fix (finding #4)", () => {
+    const checks = runDoctorChecks({ ...base, pnpmOnPath: false });
+    const { ok, failed } = summarize(checks);
+    expect(ok).toBe(false);
+    expect(failed).toContain("pnpm");
+    const pnpm = checks.find((c) => c.name === "pnpm");
+    expect(pnpm?.detail).toContain("--install-directory");
+    expect(PNPM_FIX).toContain('$HOME/.local/bin');
   });
 
   it("only WARNS when the daemon socket is unreachable (not a hard fail)", () => {
