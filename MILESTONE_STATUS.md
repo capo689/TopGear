@@ -456,15 +456,27 @@ items prepared and handed to Ace.
   on 5xx/unhandled paths (never the request body — INV-6, guardrail 1). The daemon is
   untouched. The alerting drain (Sentry DSN / Vercel log drain / deploy-failure notify) is
   account-gated — see handoff below.
-- **COST-03 (P1) — no rate limiting → CLOSED (best-effort), corrected in wave2b.** Fable's
-  wave2 review caught a real bug: the first version keyed on a COMPOSITE `ip:installId`, so an
-  attacker rotating the installId string (read pre-verification, no keypair needed) got a fresh
-  bucket every request — it did not limit at all. **wave2b fix:** TWO independent buckets —
-  IP alone before verify (rotation can't escape it; protects the verify from being the DoS
-  target) and the VERIFIED installId after verify (bounds one install across IPs); either
-  trips 429. `cost.test.ts` (5) now includes the same-IP/rotating-installId control (fails on
-  the old code) and the many-IPs/one-installId secondary-bucket test. Honest limits unchanged:
-  per warm instance only; IP rotation / cross-instance still escapes it; not a hard cap.
+- **COST-03 (P0) — rate limiter that didn't limit → CLOSED.** The wave2 version keyed on a
+  COMPOSITE `ip:installId` (read pre-verification), so rotating the installId string minted a
+  fresh bucket every request — no limit at all. **Fix (wave2b + this pass):** two independent
+  `createRateLimiter()` instances keyed on SINGLE bare values — `ipLimiter(ip)` BEFORE ed25519
+  verify (the DoS bound; rotation can't escape it), `idLimiter(verifiedInstallId)` AFTER verify
+  (per-install fairness; key is always cryptographically proven, never an unauthenticated body
+  field). Shared `packages/contribution/src/rate-limit.ts`; the stub imports it and the Vercel
+  functions inline a byte-identical copy, so **stub === function** — now guarded by a
+  rate-limit **parity** case, not just payload paths.
+  - **Evidence (test names):** `cost.test.ts` → `(a) same IP, ROTATING installId … still rate
+    limited by IP` [the control whose absence let the bug ship], `(b) same IP, same installId`,
+    `(c) different IPs, same VERIFIED installId → installId bound trips`, `(d) INVALID signatures
+    consume the IP bucket but leave the installId bucket untouched`, `(e) valid fresh request
+    passes`; `parity.test.ts` → `rate-limit parity: stub === function on the 429 path`.
+  - **DOD checks:** no composite key anywhere (grep clean); no unverified attacker-controlled
+    value used as a key (`claimedId` deleted; id-bucket keys only on the verified installId).
+  - **Honest limits (not a hard cap):** in-memory, per warm instance, no durable storage — a
+    distributed flood across instances or IP rotation still escapes it. A hard cap needs a
+    durable KV, deferred with the storage decision.
+  - **Verified:** clean-install build 25/25; full suite **234 tests / 43 tasks green**
+    (commons-ingest → cost 10, parity 18, authz 8, server 2).
 
 **Evidence:** typecheck 45/45; clean-install build 25/25; full suite **43 tasks green**
 (commons-ingest 27→30). Daemon/execution path untouched.

@@ -224,16 +224,26 @@ section first. Dates are absolute.
   Logs captures it. The ALERTING half (log drain / Sentry DSN / deploy-failure notification)
   needs an account and is handed to Ace with COST-02/CI-05 — the code emits the signal; the
   drain is the account-gated wiring.
-- **COST-03: best-effort per-instance rate limit — TWO INDEPENDENT buckets.** (Corrected in
-  wave2b after Fable caught a composite-key bug: `ip:installId` handed out a fresh bucket per
-  rotated installId string — read pre-verification, so not even a keypair was needed — and did
-  not limit at all.) The fix is two separate `rateLimited()` calls, either of which trips a 429:
-  (1) IP ALONE, checked BEFORE ed25519 verify — rotating installId cannot escape it, and it
-  keeps verification from being the DoS target; (2) the VERIFIED installId, checked after
-  verify — bounds one install's rate across IPs. In-memory sliding window (60/min) per warm
-  instance. HONEST LIMITS (recorded, not implied as a hard cap): NO durable storage, so
-  per-instance only — a distributed flood across instances, or IP rotation (botnet/proxies),
-  still escapes it. A hard cap needs a durable store (KV/Redis) — deferred with the storage
-  decision. Vercel functions only (the stub is a dev double); a transport concern, not in the
-  shared validator. Regression: `cost.test.ts` fires same-IP/rotating-installId (the control
-  that fails on the old code) and same-installId/many-IPs (the secondary bucket).
+- **COST-03: TWO INDEPENDENT rate-limit buckets, never a composite.** (Corrected across
+  wave2b after Fable caught a composite-key bug: `ip:installId` handed a rotating installId a
+  fresh bucket every request — read pre-verification, no keypair needed — so there was no limit
+  at all.) Two `createRateLimiter()` INSTANCES, each keyed on a SINGLE value (bare, no colon):
+  `ipLimiter(ip)` and `idLimiter(verifiedInstallId)`; either trips 429.
+  - **Bucket design (one line):** one instance = one bucket namespace, single-value key — so
+    rotating one value cannot widen the other's bound, and spoofing one cannot spend another's.
+  - **Ordering (one line):** the IP bucket is checked BEFORE ed25519 verify because it is the
+    DoS bound and must protect the expensive verify path, so it cannot depend on anything
+    verification produces; the installId bucket is checked AFTER verify so its key is always a
+    cryptographically-proven value, never an unauthenticated body field.
+  - Shared source of truth `packages/contribution/src/rate-limit.ts`; the stub imports it and
+    the Vercel functions inline a byte-identical copy (dependency-free) — so stub === function,
+    now guarded by a rate-limit parity case (both 429 at the same threshold), not just the
+    payload paths. `validate.ts` returns the verified installId on the 503 path too, so the
+    stub applies the id-bucket at the same point the function does.
+  - HONEST LIMITS: in-memory sliding window (60/min) per warm instance, NO durable storage —
+    a distributed flood across instances or IP rotation still escapes it; not a hard cap (needs
+    a durable KV, deferred with storage).
+  - Regression: `cost.test.ts` cases (a) same-IP/rotating-installId still limited [the control
+    whose absence let the bug ship], (b) same IP+id, (c) many-IPs/one-id → id bucket only,
+    (d) invalid sigs consume the IP bucket but leave the id bucket untouched, (e) fresh/valid
+    passes.

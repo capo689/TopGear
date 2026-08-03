@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import type { ContributionRecord } from "@browser-bridge/contribution";
+import { type ContributionRecord, createRateLimiter, clientIp } from "@browser-bridge/contribution";
 import { validateContribution, validatePurge } from "./validate.js";
 
 /**
@@ -33,6 +33,10 @@ export function startCommonsIngest(
   const host = options.host ?? "127.0.0.1";
   const storageConfigured = options.storageConfigured ?? true;
   const quarantine: ContributionRecord[] = [];
+  // COST-03: the SAME two independent buckets the Vercel functions use, so stub === function
+  // (parity.test guards it). Per-server instances → fresh state per startCommonsIngest.
+  const ipLimiter = createRateLimiter();
+  const idLimiter = createRateLimiter();
 
   const server = createServer((req, res) => {
     const send = (status: number, body: unknown): void => {
@@ -42,6 +46,10 @@ export function startCommonsIngest(
     if (req.method !== "POST") return send(405, { error: "method not allowed" });
 
     void readBody(req).then((raw) => {
+      // COST-03 primary bucket: IP alone, before any validation/verification.
+      const ip = clientIp(req);
+      if (ipLimiter(ip)) return send(429, { error: "rate limited" });
+
       if (req.url === "/contributions") {
         // Oversize is checked BEFORE parse (matches api/contributions.ts).
         let rec: Record<string, unknown> | null;
@@ -51,6 +59,8 @@ export function startCommonsIngest(
           rec = null;
         }
         const result = validateContribution(raw.length, rec, { storageConfigured });
+        // COST-03 secondary bucket: the VERIFIED installId (present once verify passed).
+        if (result.installId && idLimiter(result.installId)) return send(429, { error: "rate limited" });
         if (result.status === 202 && rec) quarantine.push(rec as unknown as ContributionRecord);
         return send(result.status, result.body);
       }
@@ -62,6 +72,7 @@ export function startCommonsIngest(
           proof = null;
         }
         const result = validatePurge(proof, { storageConfigured });
+        if (result.installId && idLimiter(result.installId)) return send(429, { error: "rate limited" });
         if (result.status !== 200 || !result.installId) return send(result.status, result.body);
         // Purge ONLY the installId derived from the verified proof (AUTHZ-02).
         const before = quarantine.length;

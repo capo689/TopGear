@@ -123,3 +123,40 @@ describe("purge parity: local stub === Vercel function", () => {
     });
   }
 });
+
+describe("rate-limit parity: stub === function on the 429 path (COST-03)", () => {
+  it("a same-IP burst of valid records trips 429 at the same point in BOTH", async () => {
+    // Fresh IP + fresh identity so neither bucket is pre-warmed by other cases.
+    const idn = new InstallIdentity();
+    const u = { origin: "https://ex.com", kind: "widget", day: "2026-08-01", installId: idn.installId };
+    const rec = { ...u, publicKey: idn.publicKey, signature: idn.sign(u) };
+    const IP = "203.0.113.200";
+
+    const stubStatuses: number[] = [];
+    for (let i = 0; i < 61; i++) {
+      const r = await fetch(stubOn.url + "/contributions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": IP },
+        body: JSON.stringify(rec),
+      });
+      stubStatuses.push(r.status);
+    }
+
+    const fnStatuses = await withBlobMock(true, async () => {
+      const out: number[] = [];
+      for (let i = 0; i < 61; i++) {
+        let status = 0;
+        const res = { setHeader() {}, status(s: number) { status = s; return this; }, end() {} };
+        await vercelContributions({ method: "POST", headers: { "x-forwarded-for": IP }, body: rec } as never, res as never);
+        out.push(status);
+      }
+      return out;
+    });
+
+    // Both accept the first 60 (202) and 429 the 61st — identical threshold + status path.
+    expect(stubStatuses.slice(0, 60).every((s) => s === 202)).toBe(true);
+    expect(fnStatuses.slice(0, 60).every((s) => s === 202)).toBe(true);
+    expect(stubStatuses[60]).toBe(429);
+    expect(fnStatuses[60]).toBe(429);
+  });
+});

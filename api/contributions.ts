@@ -74,29 +74,32 @@ function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): v
   }
 }
 
-// COST-03: best-effort per-instance rate limit with TWO INDEPENDENT buckets (either trips):
-//   1. IP alone (primary), checked BEFORE verification — an attacker rotating the installId
-//      string CANNOT escape it, and it protects the ed25519 verify from being the DoS target.
-//   2. the VERIFIED installId (secondary), checked after verification — bounds one install's
-//      rate even across IPs.
-// A composite `ip:installId` key would be defeated by rotating installId, so the buckets are
-// namespaced (`ip:` / `id:`) and checked separately. NO durable storage, so this is per warm
-// instance only — a distributed flood across instances, or IP rotation, still escapes it.
-const RL_WINDOW_MS = 60_000;
-const RL_MAX = 60;
-const rlHits = new Map<string, number[]>();
-function rateLimited(key: string, now: number = Date.now()): boolean {
-  const arr = (rlHits.get(key) ?? []).filter((t) => now - t < RL_WINDOW_MS);
-  arr.push(now);
-  rlHits.set(key, arr);
-  if (rlHits.size > 5000) for (const [k, v] of rlHits) if (v.every((t) => now - t >= RL_WINDOW_MS)) rlHits.delete(k);
-  return arr.length > RL_MAX;
+// COST-03: TWO independent best-effort buckets, each keyed on a SINGLE value (never a
+// composite — a composite `ip:installId` hands a rotating installId a fresh IP bucket every
+// request, which is no limit at all). Inlined byte-identical to
+// packages/contribution/src/rate-limit.ts (Vercel functions are dependency-free); parity
+// guards the pair. Per warm instance only — IP rotation / cross-instance still escapes it.
+function createRateLimiter(windowMs = 60_000, max = 60): (key: string, now?: number) => boolean {
+  const hits = new Map<string, number[]>();
+  return (key: string, now: number = Date.now()): boolean => {
+    const arr = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    arr.push(now);
+    hits.set(key, arr);
+    if (hits.size > 5000) for (const [k, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k);
+    return arr.length > max;
+  };
 }
 function clientIp(req: any): string {
   const xff = req?.headers?.["x-forwarded-for"];
   const first = Array.isArray(xff) ? xff[0] : typeof xff === "string" ? xff.split(",")[0] : undefined;
   return (first || req?.headers?.["x-real-ip"] || "unknown").toString().trim();
 }
+// Bucket 1: IP alone. Checked BEFORE ed25519 verify — it is the DoS bound, so it must not
+// depend on anything verification produces, and rotating installId cannot widen it.
+const ipLimiter = createRateLimiter();
+// Bucket 2: the VERIFIED installId. Checked AFTER verify — the per-install fairness bound; a
+// request that fails verification never reaches it, and an unverified body value is never a key.
+const idLimiter = createRateLimiter();
 
 export default async function handler(req: any, res: any): Promise<void> {
   try {
@@ -120,10 +123,9 @@ async function handle(req: any, res: any): Promise<void> {
     return json(res, 400, { error: "invalid json" });
   }
 
-  // COST-03 primary: rate-limit on IP ALONE, before the expensive verify. installId is NOT
-  // in this key — rotating it must not mint a fresh bucket.
+  // COST-03 primary bucket: IP alone, before the expensive verify.
   const ip = clientIp(req);
-  if (rateLimited(`ip:${ip}`)) return json(res, 429, { error: "rate limited" });
+  if (ipLimiter(ip)) return json(res, 429, { error: "rate limited" });
 
   if (!rec.origin || !rec.installId || !rec.signature || !rec.publicKey) {
     return json(res, 400, { error: "missing fields", needed: ["origin", "installId", "publicKey", "signature"] });
@@ -147,9 +149,8 @@ async function handle(req: any, res: any): Promise<void> {
   if (!verified.ok) return json(res, 401, { error: "unauthorized", detail: verified.reason });
   const installId = verified.installId;
 
-  // COST-03 secondary: an independent bucket on the VERIFIED installId, bounding one
-  // install's rate across IPs.
-  if (rateLimited(`id:${installId}`)) return json(res, 429, { error: "rate limited" });
+  // COST-03 secondary bucket: the VERIFIED installId, bounding one install's rate across IPs.
+  if (idLimiter(installId)) return json(res, 429, { error: "rate limited" });
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {

@@ -43,8 +43,10 @@ export function validateContribution(
   // whether storage exists (no oracle). A forged/absent signature can never be stored.
   const v = verifyContributionSignature(rec);
   if (!v.ok) return { status: 401, body: { error: "unauthorized", detail: v.reason } };
+  // installId is returned as soon as verify passes (503 AND 202), so the caller can apply the
+  // verified-installId rate-limit bucket at the same point the Vercel function does.
   if (!opts.storageConfigured) {
-    return { status: 503, body: { error: "quarantine storage not configured" } };
+    return { status: 503, body: { error: "quarantine storage not configured" }, installId: v.installId };
   }
   return { status: 202, body: { accepted: true }, installId: v.installId };
 }
@@ -60,6 +62,6 @@ export function validatePurge(
   if (proof === null) return { status: 400, body: { error: "invalid json" } };
   const v = verifyPurgeProof(proof);
   if (!v.ok) return { status: 401, body: { error: "unauthorized", detail: v.reason } };
-  if (!opts.storageConfigured) return { status: 503, body: { error: "quarantine storage not configured" } };
+  if (!opts.storageConfigured) return { status: 503, body: { error: "quarantine storage not configured" }, installId: v.installId };
   return { status: 200, body: { purged: 0 }, installId: v.installId };
 }

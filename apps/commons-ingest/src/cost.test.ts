@@ -62,3 +62,58 @@ describe("rate limiting (COST-03)", () => {
     expect(first).not.toBe(429);
   });
 });
+
+/** The five cases the brief requires, named a)-e). Real handler, no mocks. */
+describe("COST-03 required cases (a)-(e)", () => {
+  const validRecord = (id: InstallIdentity, origin = "https://ex.com") => {
+    const unsigned = { origin, kind: "widget", day: "2026-08-01", installId: id.installId };
+    return { ...unsigned, publicKey: id.publicKey, signature: id.sign(unsigned) };
+  };
+
+  it("(a) same IP, ROTATING installId every request → still rate limited by IP", async () => {
+    const ip = { "x-forwarded-for": "172.16.1.1" };
+    const s: number[] = [];
+    for (let i = 0; i < 200; i++) s.push(await fire(vercelContributions, ip, { installId: `rot-${i}` }));
+    expect(s.slice(0, 60).every((x) => x !== 429)).toBe(true);
+    expect(s[60]).toBe(429);
+    expect(s.filter((x) => x === 429).length).toBeGreaterThan(130);
+  });
+
+  it("(b) same IP, same installId → limited by whichever bound trips first", async () => {
+    const ip = { "x-forwarded-for": "172.16.2.1" };
+    const s: number[] = [];
+    for (let i = 0; i < 65; i++) s.push(await fire(vercelContributions, ip, { installId: "fixed" }));
+    expect(s[64]).toBe(429);
+  });
+
+  it("(c) different IPs, same VERIFIED installId → installId bound trips, IP bound does not", async () => {
+    const id = new InstallIdentity();
+    const rec = validRecord(id);
+    const s: number[] = [];
+    for (let i = 0; i < 65; i++) s.push(await fire(vercelContributions, { "x-forwarded-for": `172.17.${i}.9` }, rec));
+    // Each IP is fresh (bucket=1), so only the installId bucket can trip. 503 = passed verify
+    // + id-bucket, then no storage; 61st trips the installId bound.
+    expect(s.slice(0, 60).every((x) => x === 503)).toBe(true);
+    expect(s[64]).toBe(429);
+  });
+
+  it("(d) INVALID signatures consume the IP bucket but leave the installId bucket untouched", async () => {
+    const q = new InstallIdentity();
+    const bad = { ...validRecord(q), signature: "not-a-valid-signature" }; // reaches verify, fails there (401)
+    const ipd = { "x-forwarded-for": "172.18.5.5" };
+    const s: number[] = [];
+    for (let i = 0; i < 60; i++) s.push(await fire(vercelContributions, ipd, bad));
+    expect(s.every((x) => x === 401)).toBe(true); // all failed verify, none rate-limited yet
+    // IP bucket IS consumed by the invalids → the 61st from this IP is 429…
+    expect(await fire(vercelContributions, ipd, bad)).toBe(429);
+    // …but installId q's bucket was NOT touched (verify failed before it), so a VALID q record
+    // from a fresh IP still passes (503 no storage, not 429).
+    expect(await fire(vercelContributions, { "x-forwarded-for": "172.18.6.6" }, validRecord(q))).toBe(503);
+  });
+
+  it("(e) a valid request from a fresh IP and fresh verified installId passes (not rate limited)", async () => {
+    const status = await fire(vercelContributions, { "x-forwarded-for": "172.19.7.7" }, validRecord(new InstallIdentity()));
+    expect(status).toBe(503); // passes IP + verify + installId buckets; 503 only because no storage token
+    expect(status).not.toBe(429);
+  });
+});
