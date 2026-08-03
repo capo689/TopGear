@@ -303,3 +303,30 @@ Two P0s Fable MEASURED against the real handlers, plus P1/P2 hardening.
   asserted. The `clientIp` docstring now carries this evidence instead of the old assertion.
   (Note: Vercel REPLACED x-forwarded-for rather than appending, so the rightmost-XFF handling
   is belt-and-braces for non-Vercel proxies, not the Vercel path.)
+
+## Preview-deployment hygiene (PROPOSAL — awaiting Ace; must settle before R1)
+
+**Problem (Fable, 2026-08-03):** the source-level probe removal did not remove the deployed
+probe (`top-gear-bwhhrit70…/api/probe-ip` returns 200), and old previews still execute
+vulnerable builds (e.g. wave2b's, with the forgeable IP key + never-evicting sweep). Measured
+project state: passwordProtection OFF, ssoProtection OFF, trustedIps OFF — every one of the
+~20 READY deployments is publicly reachable. An external-user (R1) release cannot leave
+known-vulnerable builds publicly reachable.
+
+**Two options considered:**
+1. **Vercel Authentication (SSO) on PREVIEW deployments only** — production (the `git-main`
+   alias) stays public so end-user daemons can POST contributions (INV-10), while every
+   preview (current AND future) requires auth. One setting; RETROACTIVELY covers the probe and
+   all old vulnerable previews at once.
+2. **Delete preview deployments on branch merge** — no single Vercel toggle (needs branch
+   auto-deletion + "remove deployments on branch delete", or manual/scripted `vercel remove`);
+   leaves a merge→deletion window and does NOT retroactively cover deployments already live.
+
+**Recommendation: option 1** (SSO on previews only), because it is one setting, is retroactive,
+and preserves the intentionally-public production ingest endpoint. Pair it with a one-time
+cleanup deleting the specific known-vulnerable deployments so they don't linger even behind auth.
+
+**Not applied.** `update_project_deployment_protection` can enable this, but it changes Ace's
+workflow, so per instruction it is PROPOSED, not applied. Deleting deployments has no MCP tool
+and needs Ace's authenticated Vercel CLI/dashboard. Both are handed to Ace below. **R1 gate:
+this must be settled before any external release.**
