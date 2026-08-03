@@ -190,3 +190,20 @@ section first. Dates are absolute.
   in api/contributions.ts + api/purge.ts (Vercel functions cannot import workspace pkgs);
   the shared source of truth is packages/contribution/verify.ts, and parity.test.ts guards
   drift across all status codes for BOTH endpoints.
+
+## Wave 1b — purge replay window + wider installId (Fable wave1 re-review findings)
+
+- **Purge proof carries `issuedAt`; server enforces a ±5 min window.** The signed message
+  is now `{action:"purge", installId, issuedAt}`. Without a timestamp the proof was a
+  PERMANENT purge capability once observed (logs, retries, crash dumps). The window makes an
+  observed proof useless after 5 min. **In-window replay is accepted BY DESIGN** — purge is
+  idempotent over the caller's own install (a replayed proof purges 0 more). A server-side
+  nonce store (single-use) is deferred: it needs durable storage, and the window already
+  bounds the exposure. `issuedAt` is injectable on `purgeProof()` so tests craft
+  expired/future proofs; the server always uses its own `Date.now()`.
+- **installId widened 64 → 128 bits** (`sha256(publicKey).slice(0,16)` → `slice(0,32)`).
+  A 64-bit id gating a destructive purge is a 2^64 second-preimage grind — below standard.
+  128 bits puts impersonation out of reach. This is a DELIBERATE pre-storage BREAKING change:
+  every derived installId changes, which is free today (no quarantine data) and would be a
+  migration once real data exists — exactly why storage was gated behind this wave. The
+  Vercel inline `deriveInstallId` copies were widened byte-identically; parity guards drift.

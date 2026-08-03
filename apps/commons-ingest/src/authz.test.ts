@@ -75,4 +75,25 @@ describe("purge ownership isolation", () => {
   it("rejects a forged ownership proof (401)", async () => {
     expect(await post("/purge", { ...B.purgeProof(), signature: "AAAAAAAA" })).toBe(401);
   });
+
+  it("rejects an expired proof — an observed proof is not a permanent purge capability (401)", async () => {
+    const tenMinAgo = Date.now() - 10 * 60 * 1000;
+    expect(await post("/purge", A.purgeProof(tenMinAgo))).toBe(401);
+  });
+
+  it("accepts bounded in-window replay of the same proof (200, by design)", async () => {
+    const fresh = await startCommonsIngest({ storageConfigured: true });
+    try {
+      await fetch(fresh.url + "/contributions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(record(A)) });
+      const proof = A.purgeProof(); // one proof, replayed within the window
+      const first = await fetch(fresh.url + "/purge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(proof) });
+      const second = await fetch(fresh.url + "/purge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(proof) });
+      expect(first.status).toBe(200);
+      expect((await first.json()).purged).toBe(1);
+      expect(second.status).toBe(200); // in-window replay is accepted…
+      expect((await second.json()).purged).toBe(0); // …but idempotent — nothing left to purge
+    } finally {
+      await fresh.close();
+    }
+  });
 });

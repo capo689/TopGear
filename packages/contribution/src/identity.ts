@@ -4,9 +4,13 @@ import { generateKeyPairSync, sign as cryptoSign, createHash, type KeyObject } f
  * Derive the installId from the public key (base64 SPKI DER). The SAME function runs on
  * the server so a forged installId cannot be stored: the server recomputes this from the
  * key it just verified and ignores any installId the body claims (AUTHZ-01).
+ *
+ * 32 hex chars = 128 bits. This id gates a destructive purge, so a 64-bit id (2^64
+ * second-preimage grind) is below standard; 128 bits puts impersonation out of reach.
+ * Widened pre-storage on purpose (free now, a migration once real quarantine data exists).
  */
 export function deriveInstallId(publicKeyB64Der: string): string {
-  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 16);
+  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 32);
 }
 
 function sortKeys(obj: unknown): unknown {
@@ -52,9 +56,18 @@ export class InstallIdentity {
    * A single-purpose signed ownership proof for purge (AUTHZ-02): the server verifies it,
    * derives the installId from the key, and purges ONLY that install. A caller who does not
    * hold the private key cannot forge it, so no one can wipe another install's records.
+   *
+   * `issuedAt` is inside the signed message and the server enforces a short acceptance
+   * window, so an observed proof is not a permanent purge capability (only bounded in-window
+   * replay). `issuedAt` is injectable so tests can craft expired/future proofs.
    */
-  purgeProof(): PurgeProof {
-    return { publicKey: this.publicKey, installId: this.installId, signature: this.sign({ action: "purge", installId: this.installId }) };
+  purgeProof(issuedAt: number = Date.now()): PurgeProof {
+    return {
+      publicKey: this.publicKey,
+      installId: this.installId,
+      issuedAt,
+      signature: this.sign({ action: "purge", installId: this.installId, issuedAt }),
+    };
   }
 }
 
@@ -62,5 +75,7 @@ export class InstallIdentity {
 export interface PurgeProof {
   publicKey: string;
   installId: string;
+  /** epoch ms; the server accepts the proof only within ±PURGE_WINDOW_MS of its own clock. */
+  issuedAt: number;
   signature: string;
 }

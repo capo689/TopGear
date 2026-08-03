@@ -103,10 +103,13 @@ describe("contributions parity: local stub === Vercel function", () => {
   }
 });
 
+const TEN_MIN = 10 * 60 * 1000;
 const purgeCases: { name: string; token: boolean; body: unknown; expect: number }[] = [
-  { name: "valid ownership proof → 200", token: true, body: id.purgeProof(), expect: 200 },
+  { name: "valid in-window ownership proof → 200", token: true, body: id.purgeProof(), expect: 200 },
   { name: "forged proof signature → 401", token: true, body: { ...id.purgeProof(), signature: "AAAAAAAA" }, expect: 401 },
   { name: "bare installId with no proof → 401", token: true, body: { installId: id.installId }, expect: 401 },
+  { name: "expired proof (issuedAt 10 min ago) → 401", token: true, body: id.purgeProof(Date.now() - TEN_MIN), expect: 401 },
+  { name: "future-dated proof (issuedAt 10 min ahead) → 401", token: true, body: id.purgeProof(Date.now() + TEN_MIN), expect: 401 },
   { name: "valid proof but no storage → 503", token: false, body: id.purgeProof(), expect: 503 },
 ];
 

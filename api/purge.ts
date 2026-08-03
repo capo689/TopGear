@@ -25,7 +25,7 @@ function canonicalJSON(obj: unknown): string {
   return JSON.stringify(sortKeys(obj));
 }
 function deriveInstallId(publicKeyB64Der: string): string {
-  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 16);
+  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 32);
 }
 function verifyEd25519(publicKeyB64Der: string, message: string, signatureB64: string): boolean {
   try {
@@ -35,15 +35,19 @@ function verifyEd25519(publicKeyB64Der: string, message: string, signatureB64: s
     return false;
   }
 }
+const PURGE_WINDOW_MS = 5 * 60 * 1000;
 function verifyPurgeProof(proof: Record<string, unknown>): { ok: true; installId: string } | { ok: false; reason: string } {
-  const { publicKey, signature } = proof;
-  if (typeof publicKey !== "string" || typeof signature !== "string") {
-    return { ok: false, reason: "missing publicKey/signature" };
+  const { publicKey, signature, issuedAt } = proof;
+  if (typeof publicKey !== "string" || typeof signature !== "string" || typeof issuedAt !== "number") {
+    return { ok: false, reason: "missing publicKey/signature/issuedAt" };
   }
   const installId = deriveInstallId(publicKey);
-  if (!verifyEd25519(publicKey, canonicalJSON({ action: "purge", installId }), signature)) {
+  if (!verifyEd25519(publicKey, canonicalJSON({ action: "purge", installId, issuedAt }), signature)) {
     return { ok: false, reason: "signature verification failed" };
   }
+  const now = Date.now();
+  if (issuedAt > now + PURGE_WINDOW_MS) return { ok: false, reason: "proof not yet valid" };
+  if (issuedAt < now - PURGE_WINDOW_MS) return { ok: false, reason: "proof expired" };
   return { ok: true, installId };
 }
 // --- end inlined ---

@@ -422,6 +422,24 @@ which is the safe direction.
 device key is ed25519 (asymmetric). Implemented as asymmetric verification (public key in
 the record, no server secret) — the correct fit; recorded in DECISIONS.md.
 
+### Wave 1b — purge replay window + wider installId (wave1 re-review) — COMPLETE (pending review)
+
+Two MODERATE findings from Fable's wave1 re-review; the storage gate stays closed until
+these pass re-review.
+
+- **Purge proof was replayable indefinitely → FIXED.** The signed message `{action:"purge",
+  installId}` was constant per install — an observed proof was a permanent purge capability.
+  Now it includes `issuedAt` and the server enforces a ±5 min acceptance window. New cases:
+  expired → 401, future-dated → 401, and bounded in-window replay still 200 (idempotent,
+  accepted by design). authz 6→8, parity 15→17.
+- **installId widened 64 → 128 bits → FIXED.** `sha256(publicKey).slice(0,16)` → `slice(0,32)`.
+  A destructive-op id at 2^64 grind was below standard. Recorded in DECISIONS as a deliberate
+  pre-storage breaking change (free now, a migration once real data exists — the reason
+  storage was gated behind this wave). Vercel inline copies widened byte-identically.
+
+**Evidence:** typecheck 45/45; full suite **43 tasks green** (commons-ingest 23→27). Still
+no execution-path file touched; Blob store still NOT created.
+
 ## M4 — Replay and Commons serving — NOT STARTED (field-data gated)
 
 Blocked on M3 external review AND on R1/R1.5 field data (plan forbids faking M4's gate).

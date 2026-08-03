@@ -33,7 +33,7 @@ function canonicalJSON(obj: unknown): string {
   return JSON.stringify(sortKeys(obj));
 }
 function deriveInstallId(publicKeyB64Der: string): string {
-  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 16);
+  return createHash("sha256").update(publicKeyB64Der).digest("hex").slice(0, 32);
 }
 function verifyEd25519(publicKeyB64Der: string, message: string, signatureB64: string): boolean {
   try {

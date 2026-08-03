@@ -49,19 +49,31 @@ export function verifyContributionSignature(rec: Record<string, unknown>): Verif
   return { ok: true, installId: derived };
 }
 
+/** How far from the server's clock a purge proof's issuedAt may be (each direction). */
+export const PURGE_WINDOW_MS = 5 * 60 * 1000;
+
 /**
  * Verify a purge ownership proof. The signed message binds the action to the installId
- * derived from the key, so a proof for install A cannot purge install B, and it cannot be
- * repurposed as a contribution.
+ * derived from the key AND a fresh `issuedAt`, so a proof for install A cannot purge
+ * install B, cannot be repurposed as a contribution, and is not a permanent purge
+ * capability: it is accepted only within ±PURGE_WINDOW_MS of the server's clock. Bounded
+ * in-window replay is accepted by design (idempotent purge of the caller's own install).
  */
-export function verifyPurgeProof(proof: Record<string, unknown>): VerifyOk | VerifyErr {
-  const { publicKey, signature } = proof;
-  if (typeof publicKey !== "string" || typeof signature !== "string") {
-    return { ok: false, reason: "missing publicKey/signature" };
+export function verifyPurgeProof(
+  proof: Record<string, unknown>,
+  opts: { now?: number; windowMs?: number } = {},
+): VerifyOk | VerifyErr {
+  const { publicKey, signature, issuedAt } = proof;
+  if (typeof publicKey !== "string" || typeof signature !== "string" || typeof issuedAt !== "number") {
+    return { ok: false, reason: "missing publicKey/signature/issuedAt" };
   }
   const installId = deriveInstallId(publicKey);
-  if (!verifyEd25519(publicKey, canonicalJSON({ action: "purge", installId }), signature)) {
+  if (!verifyEd25519(publicKey, canonicalJSON({ action: "purge", installId, issuedAt }), signature)) {
     return { ok: false, reason: "signature verification failed" };
   }
+  const now = opts.now ?? Date.now();
+  const windowMs = opts.windowMs ?? PURGE_WINDOW_MS;
+  if (issuedAt > now + windowMs) return { ok: false, reason: "proof not yet valid" };
+  if (issuedAt < now - windowMs) return { ok: false, reason: "proof expired" };
   return { ok: true, installId };
 }
