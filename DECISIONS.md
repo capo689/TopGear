@@ -247,3 +247,33 @@ section first. Dates are absolute.
     whose absence let the bug ship], (b) same IP+id, (c) many-IPs/one-id → id bucket only,
     (d) invalid sigs consume the IP bucket but leave the id bucket untouched, (e) fresh/valid
     passes.
+
+## Wave 2c — COST-03 reopened: trusted IP, real eviction, ordering (Fable wave2b findings)
+
+Two P0s Fable MEASURED against the real handlers, plus P1/P2 hardening.
+
+- **Trusted-IP-header choice.** `clientIp` was taking `x-forwarded-for.split(",")[0]` — the
+  client-controlled LEFTMOST entry — so any client that set the header got a fresh bucket per
+  request (measured: 0/200 limited). Now: prefer `x-vercel-forwarded-for`, then `x-real-ip`
+  (platform-set, unforgeable on Vercel); consult `x-forwarded-for` LAST and only its RIGHTMOST
+  entry (the hop added by the closest trusted proxy). Same logic in the shared module + both
+  functions + the stub.
+- **Eviction policy: unconditional oldest-key eviction, hard cap.** The old sweep only deleted
+  keys whose every hit had expired — under key rotation nothing ever expires, so it deleted
+  nothing while running an O(n) full scan every request past 5000 (measured 1547× slowdown at
+  ~30k keys). Now: hard cap `maxKeys=10_000` with `while (size > cap) delete oldest-inserted`
+  (Map insertion order) — O(1) amortized, correctness independent of expiry. Also: a saturated
+  key does NOT push past `max`, so a single hot key's array is bounded too.
+- **Rejected-request counting → NOT counted (the window drains).** Rejected requests past the
+  cap are not appended, so the bucket drains `windowMs` after the last ACCEPTED request rather
+  than being a permanent penalty box. Consequence recorded honestly: IP-based limiting still
+  means an abuser behind a shared NAT degrades legitimate users on that IP while active — but
+  they recover once the abuser drops below the limit; there is no permanent lockout.
+- **Ordering (P1): size → parse → IP bucket → verify → installId bucket, in BOTH.** The stub
+  had the IP bucket first; the functions checked size/parse first. Unified on size/parse first
+  (cheap, deterministic; obviously-malformed input is never rate-limited). Parity now has cases
+  that CROSS a saturated IP bucket (oversize→413, malformed→400, missing→429, forged→429).
+- **P2:** `api/purge.ts` gained the 16 KB size cap + 413 (it previously parsed unbounded input);
+  429s now carry `Retry-After` (window remainder, seconds) in both implementations; the
+  "byte-identical" comment was softened to "behaviourally identical, guarded by parity.test.ts"
+  (createRateLimiter is identical; clientIp is not — no unenforced identity claim is left).

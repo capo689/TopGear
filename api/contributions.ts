@@ -75,31 +75,47 @@ function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): v
 }
 
 // COST-03: TWO independent best-effort buckets, each keyed on a SINGLE value (never a
-// composite — a composite `ip:installId` hands a rotating installId a fresh IP bucket every
-// request, which is no limit at all). Inlined byte-identical to
-// packages/contribution/src/rate-limit.ts (Vercel functions are dependency-free); parity
-// guards the pair. Per warm instance only — IP rotation / cross-instance still escapes it.
-function createRateLimiter(windowMs = 60_000, max = 60): (key: string, now?: number) => boolean {
+// composite). Behaviourally identical to packages/contribution/src/rate-limit.ts (Vercel
+// functions are dependency-free); parity guards the pair. Per warm instance only — a
+// distributed flood across instances still escapes it. Returns 0 (allowed) or a positive
+// Retry-After in seconds. Unconditional oldest-key eviction bounds memory + per-request cost.
+function createRateLimiter(windowMs = 60_000, max = 60, maxKeys = 10_000): (key: string, now?: number) => number {
   const hits = new Map<string, number[]>();
-  return (key: string, now: number = Date.now()): boolean => {
+  return (key: string, now: number = Date.now()): number => {
     const arr = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    if (arr.length >= max) {
+      hits.set(key, arr); // do not push past the cap — bounds a hot key's array; window drains
+      return Math.max(1, Math.ceil((windowMs - (now - (arr[0] ?? now))) / 1000));
+    }
     arr.push(now);
     hits.set(key, arr);
-    if (hits.size > 5000) for (const [k, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k);
-    return arr.length > max;
+    while (hits.size > maxKeys) hits.delete(hits.keys().next().value as string);
+    return 0;
   };
 }
+// Trusted client IP only: platform headers first; x-forwarded-for is client-influenceable, so
+// consulted last and only its RIGHTMOST (closest-proxy) entry — never the client-set leftmost.
 function clientIp(req: any): string {
-  const xff = req?.headers?.["x-forwarded-for"];
-  const first = Array.isArray(xff) ? xff[0] : typeof xff === "string" ? xff.split(",")[0] : undefined;
-  return (first || req?.headers?.["x-real-ip"] || "unknown").toString().trim();
+  const h = req?.headers ?? {};
+  const val = (name: string): string | undefined => {
+    const v = h[name];
+    const s = Array.isArray(v) ? v[v.length - 1] : typeof v === "string" ? v : undefined;
+    return s ? s.trim() : undefined;
+  };
+  const vercel = val("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",").pop()!.trim();
+  const real = val("x-real-ip");
+  if (real) return real;
+  const xff = val("x-forwarded-for");
+  if (xff) return xff.split(",").pop()!.trim();
+  return "unknown";
 }
-// Bucket 1: IP alone. Checked BEFORE ed25519 verify — it is the DoS bound, so it must not
-// depend on anything verification produces, and rotating installId cannot widen it.
-const ipLimiter = createRateLimiter();
-// Bucket 2: the VERIFIED installId. Checked AFTER verify — the per-install fairness bound; a
-// request that fails verification never reaches it, and an unverified body value is never a key.
-const idLimiter = createRateLimiter();
+function tooMany(res: any, retryAfter: number): void {
+  res.setHeader("retry-after", String(retryAfter)); // INV-7 good citizen
+  json(res, 429, { error: "rate limited" });
+}
+const ipLimiter = createRateLimiter(); // bucket 1: trusted IP, before verify (DoS bound)
+const idLimiter = createRateLimiter(); // bucket 2: verified installId, after verify
 
 export default async function handler(req: any, res: any): Promise<void> {
   try {
@@ -123,9 +139,11 @@ async function handle(req: any, res: any): Promise<void> {
     return json(res, 400, { error: "invalid json" });
   }
 
-  // COST-03 primary bucket: IP alone, before the expensive verify.
+  // COST-03 primary bucket: trusted IP, before the expensive verify. (Size + parse are
+  // checked ABOVE, before the limiter — the same order the stub uses.)
   const ip = clientIp(req);
-  if (ipLimiter(ip)) return json(res, 429, { error: "rate limited" });
+  const ipRetry = ipLimiter(ip);
+  if (ipRetry) return tooMany(res, ipRetry);
 
   if (!rec.origin || !rec.installId || !rec.signature || !rec.publicKey) {
     return json(res, 400, { error: "missing fields", needed: ["origin", "installId", "publicKey", "signature"] });
@@ -150,7 +168,8 @@ async function handle(req: any, res: any): Promise<void> {
   const installId = verified.installId;
 
   // COST-03 secondary bucket: the VERIFIED installId, bounding one install's rate across IPs.
-  if (idLimiter(installId)) return json(res, 429, { error: "rate limited" });
+  const idRetry = idLimiter(installId);
+  if (idRetry) return tooMany(res, idRetry);
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {

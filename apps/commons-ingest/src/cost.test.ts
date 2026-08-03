@@ -117,3 +117,32 @@ describe("COST-03 required cases (a)-(e)", () => {
     expect(status).not.toBe(429);
   });
 });
+
+/** P0 (wave2c): the IP bound must survive a client that forges x-forwarded-for. */
+describe("COST-03 P0 — trusted-IP bound (spoofed headers)", () => {
+  it("a caller PREPENDING a rotating x-forwarded-for entry is STILL rate limited", async () => {
+    // Rightmost entry (203.0.113.99, the closest-proxy hop) is constant → one bucket.
+    const s: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      s.push(await fire(vercelContributions, { "x-forwarded-for": `198.18.0.${i % 250}, 203.0.113.99` }, { installId: "x" }));
+    }
+    expect(s.includes(429), "spoofed XFF was never rate limited — the primary bound does not exist").toBe(true);
+    expect(s[60]).toBe(429);
+  });
+
+  it("x-real-ip is preferred over a conflicting client-supplied x-forwarded-for", async () => {
+    const s: number[] = [];
+    for (let i = 0; i < 65; i++) {
+      s.push(await fire(vercelContributions, { "x-real-ip": "10.9.9.9", "x-forwarded-for": `spoof-${i}` }, { installId: "x" }));
+    }
+    expect(s[64]).toBe(429); // keyed on the constant x-real-ip, not the rotating x-forwarded-for
+  });
+
+  it("x-vercel-forwarded-for is preferred over a conflicting client-supplied x-forwarded-for", async () => {
+    const s: number[] = [];
+    for (let i = 0; i < 65; i++) {
+      s.push(await fire(vercelContributions, { "x-vercel-forwarded-for": "10.8.8.8", "x-forwarded-for": `spoof-${i}` }, { installId: "x" }));
+    }
+    expect(s[64]).toBe(429);
+  });
+});

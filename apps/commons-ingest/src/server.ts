@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { type ContributionRecord, createRateLimiter, clientIp } from "@browser-bridge/contribution";
-import { validateContribution, validatePurge } from "./validate.js";
+import { validateContribution, validatePurge, MAX_BYTES } from "./validate.js";
 
 /**
  * The quarantine intake (plan §2 cloud/ingest — "deliberately trivial"). This local stub
@@ -43,36 +43,50 @@ export function startCommonsIngest(
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(body));
     };
+    const tooMany = (retryAfter: number): void => {
+      res.writeHead(429, { "content-type": "application/json", "retry-after": String(retryAfter) });
+      res.end(JSON.stringify({ error: "rate limited" }));
+    };
     if (req.method !== "POST") return send(405, { error: "method not allowed" });
 
     void readBody(req).then((raw) => {
-      // COST-03 primary bucket: IP alone, before any validation/verification.
-      const ip = clientIp(req);
-      if (ipLimiter(ip)) return send(429, { error: "rate limited" });
-
+      // ORDER (identical to the Vercel functions): size cap → parse → IP bucket → validate/verify
+      // → verified-installId bucket. The cheap size + parse checks precede the limiter so
+      // obviously-malformed input is never rate-limited (and both implementations agree).
       if (req.url === "/contributions") {
-        // Oversize is checked BEFORE parse (matches api/contributions.ts).
+        if (raw.length > MAX_BYTES) return send(413, { error: "record too large" });
         let rec: Record<string, unknown> | null;
         try {
           rec = JSON.parse(raw) as Record<string, unknown>;
         } catch {
-          rec = null;
+          return send(400, { error: "invalid json" });
         }
+        const ipRetry = ipLimiter(clientIp(req));
+        if (ipRetry) return tooMany(ipRetry);
         const result = validateContribution(raw.length, rec, { storageConfigured });
-        // COST-03 secondary bucket: the VERIFIED installId (present once verify passed).
-        if (result.installId && idLimiter(result.installId)) return send(429, { error: "rate limited" });
+        if (result.installId) {
+          const idRetry = idLimiter(result.installId); // secondary bucket: verified installId
+          if (idRetry) return tooMany(idRetry);
+        }
         if (result.status === 202 && rec) quarantine.push(rec as unknown as ContributionRecord);
         return send(result.status, result.body);
       }
       if (req.url === "/purge") {
+        if (raw.length > MAX_BYTES) return send(413, { error: "record too large" });
         let proof: Record<string, unknown> | null;
         try {
           proof = JSON.parse(raw) as Record<string, unknown>;
         } catch {
           proof = null;
         }
+        if (proof === null) return send(400, { error: "invalid json" });
+        const ipRetry = ipLimiter(clientIp(req));
+        if (ipRetry) return tooMany(ipRetry);
         const result = validatePurge(proof, { storageConfigured });
-        if (result.installId && idLimiter(result.installId)) return send(429, { error: "rate limited" });
+        if (result.installId) {
+          const idRetry = idLimiter(result.installId);
+          if (idRetry) return tooMany(idRetry);
+        }
         if (result.status !== 200 || !result.installId) return send(result.status, result.body);
         // Purge ONLY the installId derived from the verified proof (AUTHZ-02).
         const before = quarantine.length;

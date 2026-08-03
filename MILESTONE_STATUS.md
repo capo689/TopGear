@@ -475,8 +475,28 @@ items prepared and handed to Ace.
   - **Honest limits (not a hard cap):** in-memory, per warm instance, no durable storage — a
     distributed flood across instances or IP rotation still escapes it. A hard cap needs a
     durable KV, deferred with the storage decision.
-  - **Verified:** clean-install build 25/25; full suite **234 tests / 43 tasks green**
-    (commons-ingest → cost 10, parity 18, authz 8, server 2).
+
+  **Wave 2c — two P0s Fable MEASURED against the real handlers (wave2b's tests missed them):**
+  - **P0.1 — the IP bound was forgeable.** `clientIp` took `x-forwarded-for.split(",")[0]`, the
+    client-controlled LEFTMOST entry (measured: 200 spoofed requests, 0 limited). **Fixed:**
+    prefer `x-vercel-forwarded-for` → `x-real-ip` (platform-set); `x-forwarded-for` consulted
+    last and only its RIGHTMOST entry. Tests: `cost.test.ts` → spoofed-XFF-still-limited,
+    x-real-ip/x-vercel preferred; `rate-limit.test.ts` → trusted-header selection.
+  - **P0.2 — the eviction sweep never evicted.** It only deleted all-expired keys; under key
+    rotation nothing expires, so it deleted nothing while running an O(n) scan every request
+    past 5000 (measured 1547× slowdown at ~30k keys, 31.5 MB unbounded). **Fixed:** hard cap
+    (10k keys) with unconditional oldest-key eviction (O(1)); a saturated key's array is bounded
+    too. Tests: `rate-limit.test.ts` → map bounded after 50k keys, per-request cost ratio < 10×.
+  - **P1 — stub ≠ function ordering.** Unified on size → parse → IP bucket → verify → id bucket
+    in BOTH. Parity now crosses a saturated IP bucket (oversize→413, malformed→400, missing→429,
+    forged→429), which the valid-only 429 case couldn't see.
+  - **P2:** `api/purge.ts` gained the 16 KB size cap + 413 (+ parity case); 429s carry
+    `Retry-After` in both; the "byte-identical" comment softened to "behaviourally identical,
+    guarded by parity" (no unenforced identity claim left).
+  - **DECISIONS recorded:** trusted-IP-header choice, eviction policy, rejected-request counting
+    (not counted → the window drains; shared-NAT degradation noted, no permanent lockout).
+  - **Verified:** clean-install build 25/25; full suite **247 tests / 43 tasks green**
+    (contribution 24 incl. rate-limit 8; commons-ingest → cost 13, parity 20, authz 8, server 2).
 
 **Evidence:** typecheck 45/45; clean-install build 25/25; full suite **43 tasks green**
 (commons-ingest 27→30). Daemon/execution path untouched.

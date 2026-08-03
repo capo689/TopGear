@@ -66,25 +66,45 @@ function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): v
   }
 }
 
+const MAX_BYTES = 16 * 1024;
+
 // COST-03: two independent best-effort buckets, each keyed on a SINGLE value (never a
-// composite) — IP alone before verify, the VERIFIED installId after verify. Inlined
-// byte-identical to packages/contribution/src/rate-limit.ts; parity guards the pair.
-function createRateLimiter(windowMs = 60_000, max = 60): (key: string, now?: number) => boolean {
+// composite). Behaviourally identical to packages/contribution/src/rate-limit.ts; parity
+// guards the pair. Returns 0 (allowed) or a positive Retry-After in seconds.
+function createRateLimiter(windowMs = 60_000, max = 60, maxKeys = 10_000): (key: string, now?: number) => number {
   const hits = new Map<string, number[]>();
-  return (key: string, now: number = Date.now()): boolean => {
+  return (key: string, now: number = Date.now()): number => {
     const arr = (hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    if (arr.length >= max) {
+      hits.set(key, arr);
+      return Math.max(1, Math.ceil((windowMs - (now - (arr[0] ?? now))) / 1000));
+    }
     arr.push(now);
     hits.set(key, arr);
-    if (hits.size > 5000) for (const [k, v] of hits) if (v.every((t) => now - t >= windowMs)) hits.delete(k);
-    return arr.length > max;
+    while (hits.size > maxKeys) hits.delete(hits.keys().next().value as string);
+    return 0;
   };
 }
 function clientIp(req: any): string {
-  const xff = req?.headers?.["x-forwarded-for"];
-  const first = Array.isArray(xff) ? xff[0] : typeof xff === "string" ? xff.split(",")[0] : undefined;
-  return (first || req?.headers?.["x-real-ip"] || "unknown").toString().trim();
+  const h = req?.headers ?? {};
+  const val = (name: string): string | undefined => {
+    const v = h[name];
+    const s = Array.isArray(v) ? v[v.length - 1] : typeof v === "string" ? v : undefined;
+    return s ? s.trim() : undefined;
+  };
+  const vercel = val("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",").pop()!.trim();
+  const real = val("x-real-ip");
+  if (real) return real;
+  const xff = val("x-forwarded-for");
+  if (xff) return xff.split(",").pop()!.trim();
+  return "unknown";
 }
-const ipLimiter = createRateLimiter(); // bucket 1: IP alone, before verify
+function tooMany(res: any, retryAfter: number): void {
+  res.setHeader("retry-after", String(retryAfter));
+  json(res, 429, { error: "rate limited" });
+}
+const ipLimiter = createRateLimiter(); // bucket 1: trusted IP, before verify
 const idLimiter = createRateLimiter(); // bucket 2: verified installId, after verify
 
 export default async function handler(req: any, res: any): Promise<void> {
@@ -99,6 +119,10 @@ export default async function handler(req: any, res: any): Promise<void> {
 async function handle(req: any, res: any): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
 
+  // Size cap BEFORE parse (P2: purge previously parsed unbounded input), matching contributions.
+  const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? "");
+  if (raw.length > MAX_BYTES) return json(res, 413, { error: "record too large" });
+
   let proof: Record<string, unknown> | null;
   try {
     proof = typeof req.body === "object" && req.body !== null ? req.body : JSON.parse(req.body ?? "{}");
@@ -107,9 +131,10 @@ async function handle(req: any, res: any): Promise<void> {
   }
   if (proof === null) return json(res, 400, { error: "invalid json" });
 
-  // COST-03 primary bucket: IP alone, before verify.
+  // COST-03 primary bucket: trusted IP, after size + parse (same order as contributions).
   const ip = clientIp(req);
-  if (ipLimiter(ip)) return json(res, 429, { error: "rate limited" });
+  const ipRetry = ipLimiter(ip);
+  if (ipRetry) return tooMany(res, ipRetry);
 
   // Authorization (AUTHZ-02): only a valid signed ownership proof authorizes a purge, and
   // it can only purge the installId derived from the proof's key.
@@ -118,7 +143,8 @@ async function handle(req: any, res: any): Promise<void> {
   const installId = verified.installId;
 
   // COST-03 secondary bucket: the VERIFIED installId.
-  if (idLimiter(installId)) return json(res, 429, { error: "rate limited" });
+  const idRetry = idLimiter(installId);
+  if (idRetry) return tooMany(res, idRetry);
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return json(res, 503, { error: "quarantine storage not configured" });

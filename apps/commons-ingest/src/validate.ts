@@ -15,7 +15,7 @@ export interface ValidationResult {
   installId?: string;
 }
 
-const MAX_BYTES = 16 * 1024;
+export const MAX_BYTES = 16 * 1024;
 const ALLOWED = new Set(["origin", "kind", "widgetKind", "fingerprint", "day", "installId", "publicKey", "signature"]);
 const ALLOWED_FP = new Set(["role", "name", "testId", "autocomplete", "inputType"]);
 

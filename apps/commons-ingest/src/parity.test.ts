@@ -110,6 +110,7 @@ const purgeCases: { name: string; token: boolean; body: unknown; expect: number 
   { name: "bare installId with no proof → 401", token: true, body: { installId: id.installId }, expect: 401 },
   { name: "expired proof (issuedAt 10 min ago) → 401", token: true, body: id.purgeProof(Date.now() - TEN_MIN), expect: 401 },
   { name: "future-dated proof (issuedAt 10 min ahead) → 401", token: true, body: id.purgeProof(Date.now() + TEN_MIN), expect: 401 },
+  { name: "oversize purge body → 413 (P2: purge now has a size cap)", token: true, body: { ...id.purgeProof(), pad: "x".repeat(20000) }, expect: 413 },
   { name: "valid proof but no storage → 503", token: false, body: id.purgeProof(), expect: 503 },
 ];
 
@@ -158,5 +159,50 @@ describe("rate-limit parity: stub === function on the 429 path (COST-03)", () =>
     expect(fnStatuses.slice(0, 60).every((s) => s === 202)).toBe(true);
     expect(stubStatuses[60]).toBe(429);
     expect(fnStatuses[60]).toBe(429);
+  });
+});
+
+describe("rate-limit parity: crossing a SATURATED IP bucket (COST-03 P1 ordering)", () => {
+  // Raw senders that let us set arbitrary headers and send non-JSON bodies.
+  const stubRaw = async (path: string, headers: Record<string, string>, body: string): Promise<number> => {
+    const r = await fetch(stubOn.url + path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body });
+    return r.status;
+  };
+  const fnRaw = (headers: Record<string, string>, body: unknown): Promise<number> =>
+    withBlobMock(true, async () => {
+      let status = 0;
+      const res = { setHeader() {}, status(s: number) { status = s; return this; }, end() {} };
+      await vercelContributions({ method: "POST", headers, body } as never, res as never);
+      return status;
+    });
+
+  it("oversize/malformed/missing/forged from a saturated IP: stub === function on each", async () => {
+    const IP = "203.0.113.210";
+    const idn = new InstallIdentity();
+    const u = { origin: "https://ex.com", kind: "widget", day: "2026-08-01", installId: idn.installId };
+    const validStr = JSON.stringify({ ...u, publicKey: idn.publicKey, signature: idn.sign(u) });
+
+    // Saturate the IP bucket on BOTH (60 accepted requests each).
+    for (let i = 0; i < 60; i++) await stubRaw("/contributions", { "x-forwarded-for": IP }, validStr);
+    await withBlobMock(true, async () => {
+      for (let i = 0; i < 60; i++) {
+        const res = { setHeader() {}, status() { return this; }, end() {} };
+        await vercelContributions({ method: "POST", headers: { "x-forwarded-for": IP }, body: JSON.parse(validStr) } as never, res as never);
+      }
+    });
+
+    const big = "x".repeat(20000);
+    const cases: { name: string; stub: number; fn: number }[] = [
+      { name: "oversize (size cap precedes limiter)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, big), fn: await fnRaw({ "x-forwarded-for": IP }, big) },
+      { name: "malformed JSON (parse precedes limiter)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, "{not json"), fn: await fnRaw({ "x-forwarded-for": IP }, "{not json") },
+      { name: "missing fields (limiter precedes fields)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, JSON.stringify({ kind: "widget" })), fn: await fnRaw({ "x-forwarded-for": IP }, { kind: "widget" }) },
+      { name: "forged signature (limiter precedes verify)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, JSON.stringify({ ...u, publicKey: idn.publicKey, signature: "bad" })), fn: await fnRaw({ "x-forwarded-for": IP }, { ...u, publicKey: idn.publicKey, signature: "bad" }) },
+    ];
+    for (const c of cases) expect(c.stub, `${c.name}: stub=${c.stub} fn=${c.fn}`).toBe(c.fn);
+    // And the concrete expected values: cheap checks bypass the saturated limiter; the rest 429.
+    expect(cases[0]!.fn).toBe(413);
+    expect(cases[1]!.fn).toBe(400);
+    expect(cases[2]!.fn).toBe(429);
+    expect(cases[3]!.fn).toBe(429);
   });
 });
