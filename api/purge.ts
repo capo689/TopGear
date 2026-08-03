@@ -57,7 +57,42 @@ function json(res: any, status: number, body: unknown): void {
   res.status(status).end(JSON.stringify(body));
 }
 
+// OBS-01: structured, redacted error signal (functions only). Never log proof/keys.
+function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): void {
+  try {
+    console.error(JSON.stringify({ level: "error", at: "commons-ingest", fn, error: err instanceof Error ? err.message : String(err), ...(ctx ?? {}) }));
+  } catch {
+    /* logging must never throw */
+  }
+}
+
+// COST-03: best-effort per-instance rate limit (see api/contributions.ts + DECISIONS).
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = 60;
+const rlHits = new Map<string, number[]>();
+function rateLimited(key: string, now: number = Date.now()): boolean {
+  const arr = (rlHits.get(key) ?? []).filter((t) => now - t < RL_WINDOW_MS);
+  arr.push(now);
+  rlHits.set(key, arr);
+  if (rlHits.size > 5000) for (const [k, v] of rlHits) if (v.every((t) => now - t >= RL_WINDOW_MS)) rlHits.delete(k);
+  return arr.length > RL_MAX;
+}
+function clientIp(req: any): string {
+  const xff = req?.headers?.["x-forwarded-for"];
+  const first = Array.isArray(xff) ? xff[0] : typeof xff === "string" ? xff.split(",")[0] : undefined;
+  return (first || req?.headers?.["x-real-ip"] || "unknown").toString().trim();
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
+  try {
+    return await handle(req, res);
+  } catch (err) {
+    reportError("purge", err);
+    return json(res, 500, { error: "internal error" });
+  }
+}
+
+async function handle(req: any, res: any): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
 
   let proof: Record<string, unknown> | null;
@@ -67,6 +102,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     proof = null;
   }
   if (proof === null) return json(res, 400, { error: "invalid json" });
+
+  // COST-03: rate-limit before verification, keyed IP + claimed installId.
+  const ip = clientIp(req);
+  const claimedId = typeof proof.installId === "string" ? proof.installId : "unknown";
+  if (rateLimited(`${ip}:${claimedId}`)) return json(res, 429, { error: "rate limited" });
 
   // Authorization (AUTHZ-02): only a valid signed ownership proof authorizes a purge, and
   // it can only purge the installId derived from the proof's key.
@@ -81,7 +121,10 @@ export default async function handler(req: any, res: any): Promise<void> {
     `https://blob.vercel-storage.com/?prefix=${encodeURIComponent(`quarantine/${installId}/`)}&limit=1000`,
     { headers: { authorization: `Bearer ${token}`, "x-api-version": "7" } },
   );
-  if (!listed.ok) return json(res, 502, { error: "quarantine list failed", status: listed.status });
+  if (!listed.ok) {
+    reportError("purge", new Error("quarantine list failed"), { status: listed.status });
+    return json(res, 502, { error: "quarantine list failed", status: listed.status });
+  }
   const { blobs = [] } = (await listed.json()) as { blobs?: { url: string }[] };
 
   let purged = 0;

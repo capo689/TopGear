@@ -207,3 +207,28 @@ section first. Dates are absolute.
   every derived installId changes, which is free today (no quarantine data) and would be a
   migration once real data exists — exactly why storage was gated behind this wave. The
   Vercel inline `deriveInstallId` copies were widened byte-identically; parity guards drift.
+
+## Wave 2 — config hardening (FINISHER: SUP-01, OBS-01, COST-03; COST-02/CI-05 handed to Ace)
+
+- **SUP-01: pnpm `onlyBuiltDependencies` = ["esbuild"] (allowlist, not blanket ignore).**
+  Enumerated the install-script-running deps in the store: esbuild is the ONLY one
+  (0.21.5 via vitest/vite, 0.24.2 via the extension bundle). Playwright 1.62 has NO install
+  script — browsers come from the explicit `playwright install chromium`. So the allowlist is
+  esbuild alone; every other transitive dep is blocked from running scripts and fails CLOSED
+  until reviewed. Proven the required way (guardrail 2): removed ALL node_modules, clean
+  `pnpm install` (only esbuild postinstall ran), `pnpm build` 25/25, full suite 43 tasks green.
+- **OBS-01: structured redacted error reporting, Vercel FUNCTIONS ONLY (guardrail 1).** Never
+  the daemon (hot path + would exfiltrate Class A/B). Each function wraps its body in
+  try/catch and emits a single-line structured `console.error({level,at,fn,error,...ctx})`
+  on 5xx paths and unhandled errors — NEVER the request body or any value (INV-6). Vercel
+  Logs captures it. The ALERTING half (log drain / Sentry DSN / deploy-failure notification)
+  needs an account and is handed to Ace with COST-02/CI-05 — the code emits the signal; the
+  drain is the account-gated wiring.
+- **COST-03: best-effort per-instance rate limit, keyed IP + installId.** In-memory sliding
+  window (60/min) per warm serverless instance. HONEST LIMITS (recorded, not implied as a
+  hard cap): NO durable storage, so it is per-instance only — a distributed flood across
+  instances escapes it, and an attacker rotating IPs escapes it. What it DOES: blunts a
+  single-source burst, and keying on IP+installId means installId rotation alone (trivial —
+  anyone mints keypairs) does NOT escape the per-IP bound. A hard cap needs a durable store
+  (KV/Redis) — deferred with the storage decision. Applied to the Vercel functions only (the
+  local stub is a dev double); not in the shared validator, since it is a transport concern.

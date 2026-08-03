@@ -63,7 +63,47 @@ function json(res: any, status: number, body: unknown): void {
   res.status(status).end(JSON.stringify(body));
 }
 
+// OBS-01: structured, REDACTED error signal (functions only, never the daemon). Vercel Logs
+// captures this; a log drain / alert integration is the account-gated follow-up. Never log
+// the record body or any value (INV-6) — only the error and a minimal non-PII context.
+function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): void {
+  try {
+    console.error(JSON.stringify({ level: "error", at: "commons-ingest", fn, error: err instanceof Error ? err.message : String(err), ...(ctx ?? {}) }));
+  } catch {
+    /* logging must never throw */
+  }
+}
+
+// COST-03: best-effort per-instance rate limit. NO durable storage, so this is per warm
+// serverless instance only — it does NOT bound a distributed flood across instances or an
+// attacker rotating IPs. It DOES blunt a single-source burst and, keyed on IP+installId,
+// stops installId rotation alone from escaping the per-IP bound. Documented in DECISIONS.
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = 60;
+const rlHits = new Map<string, number[]>();
+function rateLimited(key: string, now: number = Date.now()): boolean {
+  const arr = (rlHits.get(key) ?? []).filter((t) => now - t < RL_WINDOW_MS);
+  arr.push(now);
+  rlHits.set(key, arr);
+  if (rlHits.size > 5000) for (const [k, v] of rlHits) if (v.every((t) => now - t >= RL_WINDOW_MS)) rlHits.delete(k);
+  return arr.length > RL_MAX;
+}
+function clientIp(req: any): string {
+  const xff = req?.headers?.["x-forwarded-for"];
+  const first = Array.isArray(xff) ? xff[0] : typeof xff === "string" ? xff.split(",")[0] : undefined;
+  return (first || req?.headers?.["x-real-ip"] || "unknown").toString().trim();
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
+  try {
+    return await handle(req, res);
+  } catch (err) {
+    reportError("contributions", err);
+    return json(res, 500, { error: "internal error" });
+  }
+}
+
+async function handle(req: any, res: any): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
 
   const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? "");
@@ -75,6 +115,11 @@ export default async function handler(req: any, res: any): Promise<void> {
   } catch {
     return json(res, 400, { error: "invalid json" });
   }
+
+  // COST-03: rate-limit before the expensive verify + storage, keyed IP + claimed installId.
+  const ip = clientIp(req);
+  const claimedId = typeof rec.installId === "string" ? rec.installId : "unknown";
+  if (rateLimited(`${ip}:${claimedId}`)) return json(res, 429, { error: "rate limited" });
 
   if (!rec.origin || !rec.installId || !rec.signature || !rec.publicKey) {
     return json(res, 400, { error: "missing fields", needed: ["origin", "installId", "publicKey", "signature"] });
@@ -119,7 +164,10 @@ export default async function handler(req: any, res: any): Promise<void> {
     },
     body: JSON.stringify(rec),
   });
-  if (!put.ok) return json(res, 502, { error: "quarantine write failed", status: put.status });
+  if (!put.ok) {
+    reportError("contributions", new Error("quarantine write failed"), { status: put.status });
+    return json(res, 502, { error: "quarantine write failed", status: put.status });
+  }
 
   // PIPE-02: do not trust put.ok. Read the object back and confirm it actually persisted
   // with the expected owner, rather than assuming a 200 means durable success.
@@ -131,9 +179,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     if (!check.ok) return json(res, 502, { error: "quarantine readback failed", status: check.status });
     const stored = (await check.json()) as { installId?: string };
     if (!stored || stored.installId !== installId) {
+      reportError("contributions", new Error("quarantine verification mismatch"));
       return json(res, 502, { error: "quarantine verification mismatch" });
     }
-  } catch {
+  } catch (err) {
+    reportError("contributions", err, { phase: "readback" });
     return json(res, 502, { error: "quarantine readback failed" });
   }
 

@@ -440,6 +440,43 @@ these pass re-review.
 **Evidence:** typecheck 45/45; full suite **43 tasks green** (commons-ingest 23→27). Still
 no execution-path file touched; Blob store still NOT created.
 
+### Wave 2 — config hardening — COMPLETE (pending review)
+
+Independent of Wave 1 (touches no shared files). Three code items done; two account-gated
+items prepared and handed to Ace.
+
+- **SUP-01 (P0) — unrestricted install scripts → CLOSED.** `pnpm.onlyBuiltDependencies =
+  ["esbuild"]` in root package.json — an allowlist, not a blanket ignore. esbuild is the only
+  dep that legitimately runs a script (fetches its platform binary; Playwright 1.62 has none).
+  Every other transitive dep is blocked and fails closed until reviewed. **Proven per guardrail
+  2:** removed ALL node_modules → clean `pnpm install` (only esbuild's postinstall ran) →
+  `pnpm build` 25/25 → full suite 43 tasks green.
+- **OBS-01 (P0) — no error tracking → CODE DONE (functions only), alerting handed to Ace.**
+  Each Vercel function now wraps its body and emits a structured, REDACTED `console.error`
+  on 5xx/unhandled paths (never the request body — INV-6, guardrail 1). The daemon is
+  untouched. The alerting drain (Sentry DSN / Vercel log drain / deploy-failure notify) is
+  account-gated — see handoff below.
+- **COST-03 (P1) — no rate limiting → CLOSED (best-effort).** IP+installId in-memory sliding
+  window (60/min) on both ingest functions, returning 429 past the cap. New `cost.test.ts`
+  (3 tests) proves the 429 fires and a fresh IP is unaffected. **Honest limits recorded:** no
+  durable storage → per warm instance only; IP rotation or cross-instance distribution
+  escapes it; keying on IP+installId stops cheap installId rotation from escaping the per-IP
+  bound. Not a hard cap — that needs a durable store (deferred with storage).
+
+**Evidence:** typecheck 45/45; clean-install build 25/25; full suite **43 tasks green**
+(commons-ingest 27→30). Daemon/execution path untouched.
+
+**Handed to Ace (account-gated — I prepared everything around them):**
+- **COST-02 (P0) — Vercel spend caps + billing alerts.** Vercel dashboard → project
+  `top-gear` → Settings → Billing/Usage: set a spend limit and usage alerts BEFORE the Blob
+  token exists (Blob + function invocations are unbounded once it does).
+- **CI-05 (P0) — perform one real rollback.** Vercel dashboard → project `top-gear` →
+  Deployments → pick the previous READY production deploy → "Promote to Production" (or
+  "Instant Rollback"), confirm `/api/health` still 200, then re-promote current. Documents
+  that rollback works before it is ever needed in anger.
+- **OBS-01 alerting drain** (the notify half): add a log drain or a Sentry DSN as a Vercel
+  env var; the functions already emit the structured error lines to consume.
+
 ## M4 — Replay and Commons serving — NOT STARTED (field-data gated)
 
 Blocked on M3 external review AND on R1/R1.5 field data (plan forbids faking M4's gate).

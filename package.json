@@ -24,5 +24,9 @@
     "turbo": "^2.3.4",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "//onlyBuiltDependencies": "SUP-01: allowlist for dependency install scripts. Every OTHER transitive dep is blocked from running preinstall/install/postinstall. esbuild is the only dep that legitimately needs its script (it fetches its platform binary; used by the extension bundle and vitest/vite). Playwright 1.62 has NO install script — browsers come from the explicit `playwright install chromium`. A new transitive dep that adds a script fails CLOSED (blocked) until it is reviewed and added here.",
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }
