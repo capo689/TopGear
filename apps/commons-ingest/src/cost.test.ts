@@ -146,3 +146,25 @@ describe("COST-03 P0 — trusted-IP bound (spoofed headers)", () => {
     expect(s[64]).toBe(429);
   });
 });
+
+/** P1 (wave2d): the limiter runs FIRST, so malformed + oversize input is counted too. */
+describe("COST-03 P1 — the limiter covers malformed + oversize input", () => {
+  it("500 malformed bodies from one IP: 429s appear after the cap", async () => {
+    const ip = { "x-forwarded-for": "172.20.1.1" };
+    const s: number[] = [];
+    for (let i = 0; i < 500; i++) s.push(await fire(vercelContributions, ip, "{not json"));
+    expect(s.slice(0, 60).every((x) => x === 400)).toBe(true); // cheap 400 up to the cap…
+    expect(s[60]).toBe(429); // …then the IP bucket trips
+    expect(s.filter((x) => x === 429).length).toBeGreaterThan(400);
+  });
+
+  it("500 oversize bodies from one IP: 429s appear after the cap", async () => {
+    const ip = { "x-forwarded-for": "172.20.2.2" };
+    const big = "x".repeat(20000);
+    const s: number[] = [];
+    for (let i = 0; i < 500; i++) s.push(await fire(vercelContributions, ip, big));
+    expect(s.slice(0, 60).every((x) => x === 413)).toBe(true);
+    expect(s[60]).toBe(429);
+    expect(s.filter((x) => x === 429).length).toBeGreaterThan(400);
+  });
+});

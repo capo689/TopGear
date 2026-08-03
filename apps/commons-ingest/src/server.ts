@@ -50,9 +50,13 @@ export function startCommonsIngest(
     if (req.method !== "POST") return send(405, { error: "method not allowed" });
 
     void readBody(req).then((raw) => {
-      // ORDER (identical to the Vercel functions): size cap → parse → IP bucket → validate/verify
-      // → verified-installId bucket. The cheap size + parse checks precede the limiter so
-      // obviously-malformed input is never rate-limited (and both implementations agree).
+      // ORDER (identical to the Vercel functions): IP bucket FIRST (so malformed + oversize are
+      // counted — they are the cheapest attack), then size → parse → validate/verify →
+      // verified-installId bucket. The limiter is O(1); nothing is gained by gating it behind
+      // the cheap checks.
+      const ipRetry = ipLimiter(clientIp(req));
+      if (ipRetry) return tooMany(ipRetry);
+
       if (req.url === "/contributions") {
         if (raw.length > MAX_BYTES) return send(413, { error: "record too large" });
         let rec: Record<string, unknown> | null;
@@ -61,8 +65,6 @@ export function startCommonsIngest(
         } catch {
           return send(400, { error: "invalid json" });
         }
-        const ipRetry = ipLimiter(clientIp(req));
-        if (ipRetry) return tooMany(ipRetry);
         const result = validateContribution(raw.length, rec, { storageConfigured });
         if (result.installId) {
           const idRetry = idLimiter(result.installId); // secondary bucket: verified installId
@@ -80,8 +82,6 @@ export function startCommonsIngest(
           proof = null;
         }
         if (proof === null) return send(400, { error: "invalid json" });
-        const ipRetry = ipLimiter(clientIp(req));
-        if (ipRetry) return tooMany(ipRetry);
         const result = validatePurge(proof, { storageConfigured });
         if (result.installId) {
           const idRetry = idLimiter(result.installId);

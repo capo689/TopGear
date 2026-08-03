@@ -129,6 +129,14 @@ export default async function handler(req: any, res: any): Promise<void> {
 async function handle(req: any, res: any): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
 
+  // COST-03 primary bucket: trusted IP, checked FIRST (before size + parse). Malformed and
+  // oversize input is the CHEAPEST attack to mount and legitimate clients send almost none,
+  // so the limiter must count them; the limiter is O(1), so there is no work-avoidance reason
+  // to gate it behind the cheap checks. Order: method → IP bucket → size → parse → verify → id.
+  const ip = clientIp(req);
+  const ipRetry = ipLimiter(ip);
+  if (ipRetry) return tooMany(res, ipRetry);
+
   const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? "");
   if (raw.length > MAX_BYTES) return json(res, 413, { error: "record too large" });
 
@@ -138,12 +146,6 @@ async function handle(req: any, res: any): Promise<void> {
   } catch {
     return json(res, 400, { error: "invalid json" });
   }
-
-  // COST-03 primary bucket: trusted IP, before the expensive verify. (Size + parse are
-  // checked ABOVE, before the limiter — the same order the stub uses.)
-  const ip = clientIp(req);
-  const ipRetry = ipLimiter(ip);
-  if (ipRetry) return tooMany(res, ipRetry);
 
   if (!rec.origin || !rec.installId || !rec.signature || !rec.publicKey) {
     return json(res, 400, { error: "missing fields", needed: ["origin", "installId", "publicKey", "signature"] });

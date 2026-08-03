@@ -119,7 +119,12 @@ export default async function handler(req: any, res: any): Promise<void> {
 async function handle(req: any, res: any): Promise<void> {
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
 
-  // Size cap BEFORE parse (P2: purge previously parsed unbounded input), matching contributions.
+  // COST-03 primary bucket: trusted IP, checked FIRST (before size + parse) so malformed and
+  // oversize input is counted. Order: method → IP bucket → size → parse → verify → id bucket.
+  const ip = clientIp(req);
+  const ipRetry = ipLimiter(ip);
+  if (ipRetry) return tooMany(res, ipRetry);
+
   const raw = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? "");
   if (raw.length > MAX_BYTES) return json(res, 413, { error: "record too large" });
 
@@ -130,11 +135,6 @@ async function handle(req: any, res: any): Promise<void> {
     proof = null;
   }
   if (proof === null) return json(res, 400, { error: "invalid json" });
-
-  // COST-03 primary bucket: trusted IP, after size + parse (same order as contributions).
-  const ip = clientIp(req);
-  const ipRetry = ipLimiter(ip);
-  if (ipRetry) return tooMany(res, ipRetry);
 
   // Authorization (AUTHZ-02): only a valid signed ownership proof authorizes a purge, and
   // it can only purge the installId derived from the proof's key.

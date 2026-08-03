@@ -193,15 +193,16 @@ describe("rate-limit parity: crossing a SATURATED IP bucket (COST-03 P1 ordering
 
     const big = "x".repeat(20000);
     const cases: { name: string; stub: number; fn: number }[] = [
-      { name: "oversize (size cap precedes limiter)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, big), fn: await fnRaw({ "x-forwarded-for": IP }, big) },
-      { name: "malformed JSON (parse precedes limiter)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, "{not json"), fn: await fnRaw({ "x-forwarded-for": IP }, "{not json") },
+      { name: "oversize (limiter precedes size cap)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, big), fn: await fnRaw({ "x-forwarded-for": IP }, big) },
+      { name: "malformed JSON (limiter precedes parse)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, "{not json"), fn: await fnRaw({ "x-forwarded-for": IP }, "{not json") },
       { name: "missing fields (limiter precedes fields)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, JSON.stringify({ kind: "widget" })), fn: await fnRaw({ "x-forwarded-for": IP }, { kind: "widget" }) },
       { name: "forged signature (limiter precedes verify)", stub: await stubRaw("/contributions", { "x-forwarded-for": IP }, JSON.stringify({ ...u, publicKey: idn.publicKey, signature: "bad" })), fn: await fnRaw({ "x-forwarded-for": IP }, { ...u, publicKey: idn.publicKey, signature: "bad" }) },
     ];
     for (const c of cases) expect(c.stub, `${c.name}: stub=${c.stub} fn=${c.fn}`).toBe(c.fn);
-    // And the concrete expected values: cheap checks bypass the saturated limiter; the rest 429.
-    expect(cases[0]!.fn).toBe(413);
-    expect(cases[1]!.fn).toBe(400);
+    // wave2d: the IP bucket runs FIRST, so from a saturated IP ALL of these are 429 in both —
+    // including oversize + malformed (previously 413/400; inverted here per the P1 fix).
+    expect(cases[0]!.fn).toBe(429);
+    expect(cases[1]!.fn).toBe(429);
     expect(cases[2]!.fn).toBe(429);
     expect(cases[3]!.fn).toBe(429);
   });

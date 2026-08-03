@@ -277,3 +277,20 @@ Two P0s Fable MEASURED against the real handlers, plus P1/P2 hardening.
   429s now carry `Retry-After` (window remainder, seconds) in both implementations; the
   "byte-identical" comment was softened to "behaviourally identical, guarded by parity.test.ts"
   (createRateLimiter is identical; clientIp is not — no unenforced identity claim is left).
+
+## Wave 2d — close COST-03: limiter-first ordering + eviction trade-off (Fable wave2c findings)
+
+- **Ordering reversed to limiter-FIRST (P1).** The IP bucket now runs immediately after the
+  method check, BEFORE size + parse, in both functions and the stub:
+  `method → IP bucket → size → parse → verify → installId bucket`. Rationale (corrected from
+  wave2c, which had it backwards): malformed and oversize input is the CHEAPEST attack to mount
+  and legitimate clients send almost none, so a cost control must count it — and JSON.stringify
+  on an oversize body is real per-request CPU on Vercel. The limiter is O(1); there is no
+  work-avoidance reason to gate it behind the cheap checks. Parity's oversize/malformed
+  crossing cases inverted from 413/400 to 429 accordingly.
+- **Eviction reset trade-off (P2), recorded explicitly.** The limiter is a bounded LRU (hard
+  cap `maxKeys`, unconditional oldest-key eviction). Consequence: an attacker who can produce
+  more than `maxKeys` distinct TRUSTED IPs can push any existing key out of the map and reset
+  its bucket — including a victim's, or their own. This is inherent to bounding memory (the
+  right call). Not sharding the map by key-hash for now (the optional mitigation) — kept simple;
+  a durable store is the real fix and is deferred with storage.
