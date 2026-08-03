@@ -39,10 +39,16 @@ export function createRateLimiter(windowMs = 60_000, max = 60, maxKeys = 10_000)
 }
 
 /**
- * Best-effort client IP for rate limiting. Uses ONLY platform-controlled headers a client
- * cannot forge: x-vercel-forwarded-for, then x-real-ip. x-forwarded-for is client-influenceable
- * (proxies APPEND rightward), so it is consulted LAST and only its RIGHTMOST entry (the hop
- * added by the closest trusted proxy) is used — never the leftmost, which the client controls.
+ * Best-effort client IP for rate limiting. Prefers x-vercel-forwarded-for, then x-real-ip;
+ * x-forwarded-for is consulted LAST and only its RIGHTMOST entry (defense for non-Vercel
+ * proxies, where the client controls the leftmost).
+ *
+ * MEASURED (2026-08-03, against the deployed Vercel preview via api/probe-ip, since removed):
+ * client-supplied x-vercel-forwarded-for / x-real-ip / x-forwarded-for were ALL overwritten by
+ * Vercel's edge with the real client IP — spoofed values (203.0.113.1 / 8.8.8.8 / 1.2.3.4)
+ * were discarded and the function saw 97.115.x.x for all three, identical to baseline. So on
+ * Vercel these headers are platform-controlled; a client cannot forge them. (Evidence, not an
+ * assertion — the same failure mode the "byte-identical" claim had.)
  */
 export function clientIp(req: { headers?: Record<string, unknown> }): string {
   const h = req?.headers ?? {};

@@ -495,8 +495,25 @@ items prepared and handed to Ace.
     guarded by parity" (no unenforced identity claim left).
   - **DECISIONS recorded:** trusted-IP-header choice, eviction policy, rejected-request counting
     (not counted → the window drains; shared-NAT degradation noted, no permanent lockout).
-  - **Verified:** clean-install build 25/25; full suite **247 tests / 43 tasks green**
-    (contribution 24 incl. rate-limit 8; commons-ingest → cost 13, parity 20, authz 8, server 2).
+
+  **Wave 2d — COST-03 CLOSED.** Two items from Fable's wave2c review, both measured:
+  - **P1 — limiter now runs FIRST (before size + parse).** wave2c left an unbounded free path:
+    500 malformed → 0 rate-limited (each was rejected before the limiter). Reordered to
+    `method → IP bucket → size → parse → verify → id bucket` in both functions + the stub, so
+    the cheapest attacks are counted. Tests: 500 malformed / 500 oversize from one IP → 429
+    after the cap; the two parity crossing cases inverted (oversize/malformed from a saturated
+    IP now 429/429 in both). The misleading "obviously-malformed is never limited" comment is gone.
+  - **P2 — eviction reset trade-off recorded** in DECISIONS: a bounded LRU means an attacker
+    with > maxKeys distinct trusted IPs can reset any bucket; inherent to bounding memory, not
+    sharded (kept simple), a durable store is the real fix (deferred with storage).
+  - **P3 — trust assumption MEASURED clean (the gate for closing).** Spoofed rotating
+    x-vercel-forwarded-for / x-real-ip / x-forwarded-for to the deployed Vercel preview (via a
+    throwaway `api/probe-ip`, since removed): the edge OVERWROTE all three with the real client
+    IP, so `clientIp` resolves to a constant real IP regardless of spoofing — the IP bound
+    cannot be bypassed on Vercel. The `clientIp` docstring now carries this evidence, not an
+    assertion. **P0 genuinely closed → COST-03 CLOSED.**
+  - **Verified:** clean-install build 25/25; full suite **249 tests / 43 tasks green**
+    (contribution 24 incl. rate-limit 8; commons-ingest → cost 15, parity 20, authz 8, server 2).
 
 **Evidence:** typecheck 45/45; clean-install build 25/25; full suite **43 tasks green**
 (commons-ingest 27→30). Daemon/execution path untouched.

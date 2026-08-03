@@ -294,3 +294,12 @@ Two P0s Fable MEASURED against the real handlers, plus P1/P2 hardening.
   its bucket — including a victim's, or their own. This is inherent to bounding memory (the
   right call). Not sharding the map by key-hash for now (the optional mitigation) — kept simple;
   a durable store is the real fix and is deferred with storage.
+
+- **P3 trust assumption — MEASURED, clean (2026-08-03).** Sent spoofed rotating
+  x-vercel-forwarded-for / x-real-ip / x-forwarded-for to the deployed Vercel preview via a
+  throwaway `api/probe-ip` echo (since removed). Vercel's edge OVERWROTE all three with the
+  real client IP (spoofs discarded; `resolvedKey` was the real IP identical to baseline). The
+  IP bound therefore cannot be bypassed on Vercel — P0 (wave2c) is genuinely closed, not
+  asserted. The `clientIp` docstring now carries this evidence instead of the old assertion.
+  (Note: Vercel REPLACED x-forwarded-for rather than appending, so the rightmost-XFF handling
+  is belt-and-braces for non-Vercel proxies, not the Vercel path.)
