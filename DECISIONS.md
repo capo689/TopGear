@@ -160,3 +160,33 @@ section first. Dates are absolute.
   live run proved the scripted 2-turn baseline was only true if attach returned a view,
   which it didn't. Additive to `AttachResult`; existing `{sessionId, capabilities}`
   destructures are untouched.
+
+## Wave 1 — arm-before-storage (FINISHER P0s: AUTHZ-01/02, AUTH-01/02, PIPE-02, TEST-01)
+
+- **ed25519 asymmetric verification, NOT HMAC.** Fable's note said "HMAC the payload with
+  the device key," but the device identity is already ed25519 (asymmetric). Asymmetric is
+  the correct fit: the public key travels in each record, the server verifies with it, and
+  no server-side shared secret exists to store or leak. HMAC would require the server to
+  hold a per-install secret — strictly worse. The public key is base64 SPKI DER; installId
+  = sha256(publicKey).slice(0,16), computed the SAME way on both sides.
+- **Derive installId from the verified key; reject body mismatch.** A record whose
+  `installId` does not equal `deriveInstallId(publicKey)` is 401. Storage uses the derived
+  id, never the body's claim (AUTHZ-01). This closes commons-poisoning (plan T6): you can
+  only write under an install whose private key you hold.
+- **Verify BEFORE the storage (503) check.** A forger gets 401 whether or not storage is
+  configured — no oracle that leaks storage state. Shape/allowlist checks (413/400/422)
+  still run first so a malformed body fails fast without crypto.
+- **Purge requires a signed ownership proof.** The proof signs `{action:"purge", installId}`
+  with the device key; the server derives installId from the proof's key and purges ONLY
+  that prefix (AUTHZ-02). `IngestClient.purge(installId)` became `purge(PurgeProof)`.
+  Replay note: a captured proof only re-purges the SAME install (whose owner already asked
+  to purge) — bounded, non-escalating; a nonce store is deferred (needs durable storage).
+- **PIPE-02: read back after PUT.** The contributions endpoint no longer trusts `put.ok`;
+  it reads the object back and confirms the stored `installId` matches before 202. Failure
+  fails CLOSED (502 → the non-blocking pipeline queues for retry), never a false accept.
+  The readback is proven against an in-memory Blob simulator in parity.test; the live
+  Vercel Blob response shape is verified when the store is provisioned (Wave 3).
+- **Dependency-free Vercel copies.** The ed25519 verification is inlined byte-identically
+  in api/contributions.ts + api/purge.ts (Vercel functions cannot import workspace pkgs);
+  the shared source of truth is packages/contribution/verify.ts, and parity.test.ts guards
+  drift across all status codes for BOTH endpoints.

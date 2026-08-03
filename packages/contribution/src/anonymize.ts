@@ -19,6 +19,8 @@ export interface UnsignedContribution {
 }
 
 export interface ContributionRecord extends UnsignedContribution {
+  /** base64 SPKI DER of the install's public key — lets the server verify + derive installId. */
+  publicKey: string;
   signature: string;
 }
 

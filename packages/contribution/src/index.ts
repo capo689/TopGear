@@ -5,6 +5,7 @@
  */
 export * from "./classify.js";
 export * from "./identity.js";
+export * from "./verify.js";
 export * from "./anonymize.js";
 export * from "./ingest.js";
 export * from "./viewer.js";

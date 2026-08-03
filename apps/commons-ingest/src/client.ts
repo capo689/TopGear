@@ -1,4 +1,4 @@
-import type { IngestClient, ContributionRecord } from "@browser-bridge/contribution";
+import type { IngestClient, ContributionRecord, PurgeProof } from "@browser-bridge/contribution";
 
 /**
  * IngestClient over HTTP. Points at the local stub today and at the Vercel endpoint at
@@ -16,11 +16,11 @@ export class HttpIngestClient implements IngestClient {
     return { accepted: res.status === 202 };
   }
 
-  async purge(installId: string): Promise<{ purged: number }> {
+  async purge(proof: PurgeProof): Promise<{ purged: number }> {
     const res = await fetch(this.baseUrl + "/purge", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ installId }),
+      body: JSON.stringify(proof),
     });
     const body = (await res.json()) as { purged?: number };
     return { purged: body.purged ?? 0 };

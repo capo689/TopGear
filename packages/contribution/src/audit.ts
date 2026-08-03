@@ -73,7 +73,7 @@ export function runClassificationAudit(patterns: CandidatePattern[], probe: Publ
 
     if (cls.dataClass === "C") {
       const unsigned = anonymize(pattern, identity.installId);
-      const record: ContributionRecord = { ...unsigned, signature: identity.sign(unsigned) };
+      const record: ContributionRecord = { ...unsigned, publicKey: identity.publicKey, signature: identity.sign(unsigned) };
       contributed.push(record);
 
       // Leak checks against the SERIALIZED record.

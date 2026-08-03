@@ -53,7 +53,7 @@ export class ContributionPipeline {
         continue;
       }
       const unsigned = anonymize(pattern, this.deps.identity.installId);
-      const record: ContributionRecord = { ...unsigned, signature: this.deps.identity.sign(unsigned) };
+      const record: ContributionRecord = { ...unsigned, publicKey: this.deps.identity.publicKey, signature: this.deps.identity.sign(unsigned) };
       this.deps.viewer.record(record);
       try {
         await this.deps.ingest.submit(record);
@@ -69,7 +69,7 @@ export class ContributionPipeline {
   async killSwitch(): Promise<{ purgedLocal: number; purgedRemote: number }> {
     this.deps.consent.disable();
     const purgedLocal = this.deps.viewer.purgeAll();
-    const { purged } = await this.deps.ingest.purge(this.deps.identity.installId);
+    const { purged } = await this.deps.ingest.purge(this.deps.identity.purgeProof());
     return { purgedLocal, purgedRemote: purged };
   }
 }

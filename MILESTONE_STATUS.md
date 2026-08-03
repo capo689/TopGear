@@ -373,6 +373,55 @@ Post-fix live re-measure: **2 turns, 21/21 verified, 0 failures** (BASELINES.md 
 
 ---
 
+## FINISHER baseline audit (main@16d6466) — 32.2 / 100, DO NOT LAUNCH
+
+Fable ran the 202-check FINISHER audit. Strong where the product is rigorous (Functional
+Correctness 57.6, Testing 56.8, AI & Agent Safety 54.8, Secrets 56.0; COST-01 a full 3
+because INV-11 means there is no paid inference endpoint to expose). Low because the
+OPERATIONAL envelope is near-absent (Reliability 2.5, Frontend 7.6, Data Layer 9.0,
+Observability 15.7). 18 P0 / 76 P1 / 29 P2 open. Remediation runs in waves; the score is
+not gamed — the next audit measures whether the underlying issues moved.
+
+### Wave 1 — arm-before-storage — COMPLETE (pending Fable review)
+
+**Gate: these had to land before `BLOB_READ_WRITE_TOKEN` is ever set.** Creating the Blob
+store before this wave would have converted two dormant paper findings into a live,
+unauthenticated, forgeable public write-and-delete endpoint. **The Blob store was NOT
+created; provisioning it stays gated on this wave passing review.**
+
+- **AUTHZ-01 / AUTH-01 (P0) — forgeable contributions → CLOSED.** The endpoint required a
+  `signature` field and never verified it (presence-check only). Now every contribution's
+  ed25519 signature is verified server-side and the `installId` is DERIVED from the public
+  key; a mismatch or bad signature is 401. Commons-poisoning (plan T6) is closed: you can
+  only write under an install whose private key you hold.
+- **AUTHZ-02 / AUTH-02 (P0) — unauthenticated purge → CLOSED.** `api/purge.ts` deleted every
+  blob under a caller-supplied `installId` prefix with zero ownership proof. Purge now
+  requires a signed ownership proof; the server derives the installId from the proof's key
+  and purges ONLY that prefix. Ownership isolation is proven live over the stub (install A's
+  proof purges A's two records, leaves B's; a bare installId and a forged proof are both 401).
+- **PIPE-02 (P0) — blind write success → CLOSED.** The contributions endpoint no longer
+  trusts `put.ok`; it reads the object back and confirms the stored `installId` before 202.
+  Fails CLOSED (502 → the non-blocking pipeline queues for retry), never a false accept.
+- **TEST-01 (P0) — no authorization tests → CLOSED.** New `authz.test.ts` (6 tests, real
+  ed25519 over the real stub) + parity expanded 8→15 cases covering forgery/mismatch/no-proof
+  for BOTH endpoints, stub === Vercel.
+
+**Evidence:** typecheck 45/45; full suite **43 tasks green** (contribution 16, commons-ingest
+8→23). The 20-field form path is untouched — Wave 1 changes live only in `packages/contribution`,
+`apps/commons-ingest`, and `api/`; nothing in `packages/execution`, `semantic-engine`, or
+`locators` (guardrail 4). The execution e2e still runs the form at **2 turns, 21/21**. The
+LIVE model re-measure remains Ace's to run (this session can't drive a live model); the
+structural argument is that no execution-path file changed.
+
+**Honest boundary:** the PIPE-02 readback is proven against an in-memory Blob simulator in
+parity.test; the live Vercel Blob PUT/GET response shape is verified when the store is
+provisioned in Wave 3. If the live shape differs, the readback fails closed (502 → retry),
+which is the safe direction.
+
+**Architecture note:** Fable's brief said "HMAC the payload with the device key," but the
+device key is ed25519 (asymmetric). Implemented as asymmetric verification (public key in
+the record, no server secret) — the correct fit; recorded in DECISIONS.md.
+
 ## M4 — Replay and Commons serving — NOT STARTED (field-data gated)
 
 Blocked on M3 external review AND on R1/R1.5 field data (plan forbids faking M4's gate).

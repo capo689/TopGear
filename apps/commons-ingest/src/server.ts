@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { ContributionRecord } from "@browser-bridge/contribution";
-import { validateContribution } from "./validate.js";
+import { validateContribution, validatePurge } from "./validate.js";
 
 /**
  * The quarantine intake (plan §2 cloud/ingest — "deliberately trivial"). This local stub
@@ -55,17 +55,18 @@ export function startCommonsIngest(
         return send(result.status, result.body);
       }
       if (req.url === "/purge") {
-        let parsed: { installId?: string };
+        let proof: Record<string, unknown> | null;
         try {
-          parsed = JSON.parse(raw) as { installId?: string };
+          proof = JSON.parse(raw) as Record<string, unknown>;
         } catch {
-          return send(400, { error: "invalid json" });
+          proof = null;
         }
-        if (!parsed.installId) return send(400, { error: "missing installId" });
-        if (!storageConfigured) return send(503, { error: "quarantine storage not configured" });
+        const result = validatePurge(proof, { storageConfigured });
+        if (result.status !== 200 || !result.installId) return send(result.status, result.body);
+        // Purge ONLY the installId derived from the verified proof (AUTHZ-02).
         const before = quarantine.length;
         for (let i = quarantine.length - 1; i >= 0; i--) {
-          if (quarantine[i]!.installId === parsed.installId) quarantine.splice(i, 1);
+          if (quarantine[i]!.installId === result.installId) quarantine.splice(i, 1);
         }
         return send(200, { purged: before - quarantine.length });
       }
