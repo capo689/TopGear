@@ -456,12 +456,15 @@ items prepared and handed to Ace.
   on 5xx/unhandled paths (never the request body — INV-6, guardrail 1). The daemon is
   untouched. The alerting drain (Sentry DSN / Vercel log drain / deploy-failure notify) is
   account-gated — see handoff below.
-- **COST-03 (P1) — no rate limiting → CLOSED (best-effort).** IP+installId in-memory sliding
-  window (60/min) on both ingest functions, returning 429 past the cap. New `cost.test.ts`
-  (3 tests) proves the 429 fires and a fresh IP is unaffected. **Honest limits recorded:** no
-  durable storage → per warm instance only; IP rotation or cross-instance distribution
-  escapes it; keying on IP+installId stops cheap installId rotation from escaping the per-IP
-  bound. Not a hard cap — that needs a durable store (deferred with storage).
+- **COST-03 (P1) — no rate limiting → CLOSED (best-effort), corrected in wave2b.** Fable's
+  wave2 review caught a real bug: the first version keyed on a COMPOSITE `ip:installId`, so an
+  attacker rotating the installId string (read pre-verification, no keypair needed) got a fresh
+  bucket every request — it did not limit at all. **wave2b fix:** TWO independent buckets —
+  IP alone before verify (rotation can't escape it; protects the verify from being the DoS
+  target) and the VERIFIED installId after verify (bounds one install across IPs); either
+  trips 429. `cost.test.ts` (5) now includes the same-IP/rotating-installId control (fails on
+  the old code) and the many-IPs/one-installId secondary-bucket test. Honest limits unchanged:
+  per warm instance only; IP rotation / cross-instance still escapes it; not a hard cap.
 
 **Evidence:** typecheck 45/45; clean-install build 25/25; full suite **43 tasks green**
 (commons-ingest 27→30). Daemon/execution path untouched.

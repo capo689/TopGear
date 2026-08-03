@@ -224,11 +224,16 @@ section first. Dates are absolute.
   Logs captures it. The ALERTING half (log drain / Sentry DSN / deploy-failure notification)
   needs an account and is handed to Ace with COST-02/CI-05 — the code emits the signal; the
   drain is the account-gated wiring.
-- **COST-03: best-effort per-instance rate limit, keyed IP + installId.** In-memory sliding
-  window (60/min) per warm serverless instance. HONEST LIMITS (recorded, not implied as a
-  hard cap): NO durable storage, so it is per-instance only — a distributed flood across
-  instances escapes it, and an attacker rotating IPs escapes it. What it DOES: blunts a
-  single-source burst, and keying on IP+installId means installId rotation alone (trivial —
-  anyone mints keypairs) does NOT escape the per-IP bound. A hard cap needs a durable store
-  (KV/Redis) — deferred with the storage decision. Applied to the Vercel functions only (the
-  local stub is a dev double); not in the shared validator, since it is a transport concern.
+- **COST-03: best-effort per-instance rate limit — TWO INDEPENDENT buckets.** (Corrected in
+  wave2b after Fable caught a composite-key bug: `ip:installId` handed out a fresh bucket per
+  rotated installId string — read pre-verification, so not even a keypair was needed — and did
+  not limit at all.) The fix is two separate `rateLimited()` calls, either of which trips a 429:
+  (1) IP ALONE, checked BEFORE ed25519 verify — rotating installId cannot escape it, and it
+  keeps verification from being the DoS target; (2) the VERIFIED installId, checked after
+  verify — bounds one install's rate across IPs. In-memory sliding window (60/min) per warm
+  instance. HONEST LIMITS (recorded, not implied as a hard cap): NO durable storage, so
+  per-instance only — a distributed flood across instances, or IP rotation (botnet/proxies),
+  still escapes it. A hard cap needs a durable store (KV/Redis) — deferred with the storage
+  decision. Vercel functions only (the stub is a dev double); a transport concern, not in the
+  shared validator. Regression: `cost.test.ts` fires same-IP/rotating-installId (the control
+  that fails on the old code) and same-installId/many-IPs (the secondary bucket).

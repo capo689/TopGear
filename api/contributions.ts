@@ -74,10 +74,14 @@ function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): v
   }
 }
 
-// COST-03: best-effort per-instance rate limit. NO durable storage, so this is per warm
-// serverless instance only — it does NOT bound a distributed flood across instances or an
-// attacker rotating IPs. It DOES blunt a single-source burst and, keyed on IP+installId,
-// stops installId rotation alone from escaping the per-IP bound. Documented in DECISIONS.
+// COST-03: best-effort per-instance rate limit with TWO INDEPENDENT buckets (either trips):
+//   1. IP alone (primary), checked BEFORE verification — an attacker rotating the installId
+//      string CANNOT escape it, and it protects the ed25519 verify from being the DoS target.
+//   2. the VERIFIED installId (secondary), checked after verification — bounds one install's
+//      rate even across IPs.
+// A composite `ip:installId` key would be defeated by rotating installId, so the buckets are
+// namespaced (`ip:` / `id:`) and checked separately. NO durable storage, so this is per warm
+// instance only — a distributed flood across instances, or IP rotation, still escapes it.
 const RL_WINDOW_MS = 60_000;
 const RL_MAX = 60;
 const rlHits = new Map<string, number[]>();
@@ -116,10 +120,10 @@ async function handle(req: any, res: any): Promise<void> {
     return json(res, 400, { error: "invalid json" });
   }
 
-  // COST-03: rate-limit before the expensive verify + storage, keyed IP + claimed installId.
+  // COST-03 primary: rate-limit on IP ALONE, before the expensive verify. installId is NOT
+  // in this key — rotating it must not mint a fresh bucket.
   const ip = clientIp(req);
-  const claimedId = typeof rec.installId === "string" ? rec.installId : "unknown";
-  if (rateLimited(`${ip}:${claimedId}`)) return json(res, 429, { error: "rate limited" });
+  if (rateLimited(`ip:${ip}`)) return json(res, 429, { error: "rate limited" });
 
   if (!rec.origin || !rec.installId || !rec.signature || !rec.publicKey) {
     return json(res, 400, { error: "missing fields", needed: ["origin", "installId", "publicKey", "signature"] });
@@ -142,6 +146,10 @@ async function handle(req: any, res: any): Promise<void> {
   const verified = verifyContributionSignature(rec);
   if (!verified.ok) return json(res, 401, { error: "unauthorized", detail: verified.reason });
   const installId = verified.installId;
+
+  // COST-03 secondary: an independent bucket on the VERIFIED installId, bounding one
+  // install's rate across IPs.
+  if (rateLimited(`id:${installId}`)) return json(res, 429, { error: "rate limited" });
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {

@@ -66,7 +66,9 @@ function reportError(fn: string, err: unknown, ctx?: Record<string, unknown>): v
   }
 }
 
-// COST-03: best-effort per-instance rate limit (see api/contributions.ts + DECISIONS).
+// COST-03: two independent best-effort buckets — IP alone (before verify) and the VERIFIED
+// installId (after verify); either trips a 429. A composite key would be defeated by
+// rotating installId. Per warm instance only (see api/contributions.ts + DECISIONS).
 const RL_WINDOW_MS = 60_000;
 const RL_MAX = 60;
 const rlHits = new Map<string, number[]>();
@@ -103,16 +105,18 @@ async function handle(req: any, res: any): Promise<void> {
   }
   if (proof === null) return json(res, 400, { error: "invalid json" });
 
-  // COST-03: rate-limit before verification, keyed IP + claimed installId.
+  // COST-03 primary: IP ALONE, before verify (installId rotation cannot mint a fresh bucket).
   const ip = clientIp(req);
-  const claimedId = typeof proof.installId === "string" ? proof.installId : "unknown";
-  if (rateLimited(`${ip}:${claimedId}`)) return json(res, 429, { error: "rate limited" });
+  if (rateLimited(`ip:${ip}`)) return json(res, 429, { error: "rate limited" });
 
   // Authorization (AUTHZ-02): only a valid signed ownership proof authorizes a purge, and
   // it can only purge the installId derived from the proof's key.
   const verified = verifyPurgeProof(proof);
   if (!verified.ok) return json(res, 401, { error: "unauthorized", detail: verified.reason });
   const installId = verified.installId;
+
+  // COST-03 secondary: an independent bucket on the VERIFIED installId.
+  if (rateLimited(`id:${installId}`)) return json(res, 429, { error: "rate limited" });
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return json(res, 503, { error: "quarantine storage not configured" });
