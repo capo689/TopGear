@@ -5,6 +5,35 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## PRE-REGISTERED PREDICTION — 33-field all-custom-combobox form (committed before the benchmark)
+
+Written before any data exists (a prediction written afterwards is worthless). Target: one
+form, 33 fields, EVERY field a CUSTOM combobox (div/ARIA widget), ZERO native `<select>`.
+
+**Turns (bridge arm): I predict 3** — `attach` (turn 1, returns `initialView`) + TWO `act`
+batches. The binding constraint is the protocol cap of **≤ 30 actions/batch** (CLAUDE.md):
+33 combobox selects + 1 submit = 34 actions > 30, so it cannot be one batch; the model must
+split (~30 + ~4). Embedded waits for each listbox are in-daemon (INV-1), NOT extra turns.
+`bridge_fill_record` does NOT collapse this to fewer turns — it builds one `act` of 33
+actions, which trips `BatchCapError` (>30), so it is not a 1-shot here either.
+- Falsifier ↓: **2 turns** ⇒ the 30-action cap isn't binding as I think (or fill_record
+  chunks internally, which it currently does not) — that gap is the finding.
+- Falsifier ↑: **4+ turns** ⇒ a combobox interaction is NOT collapsing into one daemon-side
+  action (open/pick/verify leaking into model turns), or verification failures forced retries.
+
+**WidgetKind fast paths:**
+- **Native-select proven-setter fast path: 0 hits.** It applies only to real `<select>`;
+  there are none, so every field falls through it.
+- **All 33 use the shared ARIA combobox playbook** (user-action emulation: click-open → wait
+  for listbox → click matching option → verify `aria-selected`/`selectedLabel`) — the earned
+  path for recognized libraries (react-select / Radix / MUI / Ant / headlessui / downshift).
+- **Any UNRECOGNIZED custom combobox** (no library signature) falls further down the ladder
+  (CDP trusted input / type-and-pick) and is the single most likely accuracy-loss point.
+
+**Accuracy: I predict 33/33 verified IF every widget matches a known library signature;**
+each unrecognized widget is a likely miss. Wall-clock is measured, not predicted (dominated
+by 33 open/pick interactions at machine speed + page load).
+
 ## M0 — Foundations, baseline, and security skeleton — COMPLETE (pending external review)
 
 **Release target:** none (M0 gates M1). **Built on:** 2026-08-01.
