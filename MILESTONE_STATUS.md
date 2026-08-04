@@ -5,6 +5,50 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## D1 DIAGNOSIS — combobox actuation (live, before any fix) → WORLD B (verifying blind)
+
+Measured against TWO real Greenhouse forms (GitLab `question_…` country-of-residence, and the
+ORIGINAL Discord form), replaying the exact ladder with Playwright trusted clicks. Not inferred.
+
+**The 4 data points (GitLab, Country-of-residence = the D1 "United States" failure):**
+1. **Event sequence dispatched:** `page.click(trigger)` (trusted open) → poll `role=option` (visible) →
+   `page.click(option)` (trusted). Both Playwright `.click()` = real mousedown→mouseup→click.
+2. **Visible combobox value after the pick:** the react-select `.select__single-value` renders
+   **"United States of America"**, and the aria-live region announces **"option … selected."** —
+   the selection COMMITTED.
+3. **Paired value carrier after the pick:** there is **NO hidden input** (`input[type=hidden]` = 0),
+   and a **document-wide** diff of all 23 inputs shows **zero changed**. react-select holds the value
+   in React state (rendered as `.select__single-value`); Greenhouse's Remix form serializes that
+   state on submit. The react-select **search `<input>` is cleared to `""`** after selection.
+4. **What the verifier read:** `verifyContains` → `readState(trigger).value`. For `<input role=combobox
+   type=text>`, `readElementState` takes the `tag==="input"` branch and returns the input's `.value`
+   — i.e. the **cleared search input = `""`** → `"" .includes("United States")` = false → the ladder
+   returns `"combobox value did not update after selection"`. **A false failure on a committed value.**
+
+**Confirmed on the original Discord form:** react-select, `singleValueText:"Yes"` (committed),
+`comboInputValue:""`, `hiddenInputs:0` — identical.
+
+**Verdict: WORLD B.** The actuation WORKS (react-select commits; single-value + aria announce it).
+The verifier reads the wrong element (the cleared search input). The `invalidFields` "stayed invalid"
+is the SAME root cause: the required search input is empty → `checkValidity()` false, though the value
+is committed in state.
+
+**Nuance that changes the WORLD-B fix:** the user's model was "read the hidden carrier." There is NO
+hidden DOM carrier on these forms — the submitted value is React state, whose faithful DOM proxy is
+`.select__single-value` (react-select renders it ONLY when a value is committed, so reading it cannot
+manufacture false success). **Proposed fix:** the combobox verifier reads the COMMITTED selection —
+prefer a named hidden carrier's value if one exists, else the rendered selected-value display
+(react-select single-value / equivalent), NEVER the cleared search input; and fix the `invalid`
+signal the same way so committed react-select fields stop false-flagging. Preserve the moat: never
+report a value that isn't actually committed. (5 of the 12 original "failures" were the product
+WORKING — wrong values returning real option lists — and are NOT touched.)
+
+Residual honesty: I did NOT submit the form (mandate), so "committed in state ⇒ submitted" rests on
+react-select's canonical committed markers (single-value render + aria-live "selected"), not a
+server round-trip.
+
+---
+
 ## PRE-REGISTERED PREDICTION — 33-field all-custom-combobox form (committed before the benchmark)
 
 Written before any data exists (a prediction written afterwards is worthless). Target: one
