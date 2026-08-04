@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseEventsJsonl, aggregateRuns, summarizeRuns, type LiveRunEvent } from "./live-recorder.js";
+import { parseEventsJsonl, parseRunsJsonl, aggregateRuns, summarizeRuns, type LiveRunEvent } from "./live-recorder.js";
 
 function ev(p: Partial<LiveRunEvent>): LiveRunEvent {
   return {
@@ -55,5 +55,22 @@ describe("live-recorder", () => {
   it("parses JSONL and skips garbled lines", () => {
     const text = JSON.stringify(ev({})) + "\n\n{not json\n" + JSON.stringify(ev({ tool: "view" }));
     expect(parseEventsJsonl(text)).toHaveLength(2);
+  });
+
+  it("ingests an externally-measured baseline (arm never touches the daemon) → two-arm table", () => {
+    // Bridge arm from daemon events; baseline arm from a pre-aggregated run-record line.
+    const bridgeRuns = aggregateRuns([
+      ev({ arm: "bridge", tool: "attach", ts: 0 }),
+      ev({ arm: "bridge", tool: "act", ts: 1, fieldsAttempted: 33, fieldsVerified: 33 }),
+    ]);
+    const baselineRuns = parseRunsJsonl(
+      JSON.stringify({ workflow: "wf", arm: "baseline", runIndex: 0, modelTurns: 34, fieldsAttempted: 33, fieldsVerified: 33 }),
+    );
+    expect(baselineRuns[0]!.arm).toBe("baseline");
+    expect(baselineRuns[0]!.modelTurns).toBe(34);
+    const table = summarizeRuns([...bridgeRuns, ...baselineRuns]);
+    expect(table).toContain("| wf | baseline |");
+    expect(table).toContain("| wf | bridge |");
+    expect(table).toContain("17.0×"); // 34 baseline / 2 bridge
   });
 });

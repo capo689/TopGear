@@ -25,3 +25,6 @@ test-results/
 
 # transient review bundles (regenerable; never belong in the repo)
 *.tar.gz
+
+# mcpb build artifacts (built via scripts/build-mcpb.mjs)
+*.mcpb

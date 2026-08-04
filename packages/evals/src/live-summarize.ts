@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { parseEventsJsonl, aggregateRuns, summarizeRuns } from "./live-recorder.js";
+import { parseEventsJsonl, parseRunsJsonl, aggregateRuns, summarizeRuns } from "./live-recorder.js";
 
 /**
- * `node dist/live-summarize.js <BB_EVAL_LOG.jsonl>` → prints the reproducible comparison table
- * from a benchmark round's raw event log. A round is re-runnable from the file, not a transcript.
+ * `node dist/live-summarize.js <bridge-events.jsonl> [baseline-runs.jsonl]`
+ *
+ * Prints the reproducible two-arm comparison table. The first file is the daemon's raw
+ * BB_EVAL_LOG events (bridge arm). The optional second file is externally-measured, already
+ * per-run baseline records (the baseline arm never touches the daemon — see BASELINES.md).
+ * A round is re-runnable from the files, not a transcript.
  */
 function main(): void {
-  const path = process.argv[2];
-  if (!path) {
-    process.stderr.write("usage: live-summarize <events.jsonl>\n");
+  const eventsPath = process.argv[2];
+  const baselinePath = process.argv[3];
+  if (!eventsPath) {
+    process.stderr.write("usage: live-summarize <bridge-events.jsonl> [baseline-runs.jsonl]\n");
     process.exit(2);
   }
-  const events = parseEventsJsonl(readFileSync(path, "utf8"));
-  const runs = aggregateRuns(events);
+  const runs = aggregateRuns(parseEventsJsonl(readFileSync(eventsPath, "utf8")));
+  if (baselinePath) runs.push(...parseRunsJsonl(readFileSync(baselinePath, "utf8")));
   process.stdout.write(summarizeRuns(runs) + "\n");
 }
 

@@ -71,3 +71,36 @@ The post-fix live number **matches the scripted baseline of 2** — the scripted
 faithful to real behavior. The run also confirmed all three field-fixes by live behavior:
 the model explicitly recognized `initialView` and skipped `bridge_view` unprompted;
 label-based selects verified; no phantom `invalidFields`.
+
+## Live tier — recording a two-arm round from files (not a chat window)
+
+A benchmark round is a reproducible FILE, not numbers typed into chat. Two inputs:
+
+1. **Bridge arm — `bridge-events.jsonl`** (written automatically by the daemon). Run the
+   `.mcpb` with `BB_EVAL_LOG=<path>` set and `BB_EVAL_RUN='{"workflow":"combobox-33"}'`. Each
+   `bridge_attach` starts a new run in-process (runIndex 0,1,2,…); every attach/view/act appends
+   one event line:
+   ```
+   {"ts":...,"workflow":"combobox-33","arm":"bridge","runIndex":0,"targetUrl":"https://…","tool":"attach","wallMs":6,"pageLoadMs":0,"fieldsAttempted":0,"fieldsVerified":0,"interrupted":false,"status":"attached"}
+   {"ts":...,"workflow":"combobox-33","arm":"bridge","runIndex":0,"targetUrl":"https://…","tool":"act","wallMs":812,"pageLoadMs":140,"fieldsAttempted":30,"fieldsVerified":30,"interrupted":false,"status":"completed"}
+   {"ts":...,"workflow":"combobox-33","arm":"bridge","runIndex":0,"targetUrl":"https://…","tool":"act","wallMs":95,"pageLoadMs":0,"fieldsAttempted":4,"fieldsVerified":3,"interrupted":false,"status":"partial"}
+   ```
+
+2. **Baseline arm — `baseline-runs.jsonl`** (the screenshot-loop / playwright-mcp arm never
+   touches our daemon, so it emits no events). Record it EXTERNALLY as one pre-aggregated
+   `LiveRunRecord` line per run — partial is fine, missing numbers default to 0:
+   ```
+   {"workflow":"combobox-33","arm":"baseline","runIndex":0,"modelTurns":34,"fieldsAttempted":33,"fieldsVerified":33,"terminalStatus":"completed"}
+   ```
+
+Then the summarizer merges both into one table:
+```bash
+node packages/evals/dist/live-summarize.js bridge-events.jsonl baseline-runs.jsonl
+```
+```
+| workflow | arm | runs | turns (mean) | wall ms (mean) | page-load ms (mean) | active ms (mean) | fields verified/attempted | gates | ratio vs baseline |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| combobox-33 | baseline | 1 | 34.0 | 0 | 0 | 0 | 33/33 | 0 | — |
+| combobox-33 | bridge | 1 | 3.0 | 907 | 140 | 767 | 33/34 | 0 | 11.3× |
+```
+The table has an actual comparison in it; rounds are re-runnable from the two files.
