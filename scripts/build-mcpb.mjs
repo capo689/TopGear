@@ -46,7 +46,30 @@ const manifest = {
   server: {
     type: "node",
     entry_point: "server/index.js",
-    mcp_config: { command: "node", args: ["${__dirname}/server/index.js"], env: { BB_HEADLESS: "true" } },
+    // user_config values are substituted into env via ${user_config.KEY} — the exact syntax
+    // per the MCPB manifest spec (env substitution confirmed by the spec's own example).
+    mcp_config: {
+      command: "node",
+      args: ["${__dirname}/server/index.js"],
+      env: {
+        BB_EVAL_LOG: "${user_config.eval_log_path}",
+        BB_HEADLESS: "${user_config.headless}",
+      },
+    },
+  },
+  user_config: {
+    eval_log_path: {
+      type: "string",
+      title: "Eval log path",
+      description: "JSONL path for live-tier eval telemetry (BB_EVAL_LOG). Leave empty to disable.",
+      required: false,
+    },
+    headless: {
+      type: "boolean",
+      title: "Headless browser",
+      description: "Run the browser headless (true) or visible so you can watch it (false).",
+      default: true,
+    },
   },
   tools: [
     { name: "bridge_attach", description: "Attach a tab/session; binds a TaskGrant; returns capabilities + the first SemanticView." },

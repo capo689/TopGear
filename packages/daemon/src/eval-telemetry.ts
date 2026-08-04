@@ -34,7 +34,11 @@ export type EvalRecordInput = Omit<EvalEvent, "ts" | "workflow" | "arm">;
 /** Best-effort JSONL sink. Never throws into the run. */
 export class EvalTelemetry {
   static fromEnv(env: NodeJS.ProcessEnv = process.env): EvalTelemetry | undefined {
-    if (!env.BB_EVAL_LOG) return undefined;
+    const logPath = (env.BB_EVAL_LOG ?? "").trim();
+    // Disabled when empty. Also treat a still-literal placeholder ("${user_config...}") as
+    // empty — the MCPB spec doesn't document how an unset optional string renders, so if the
+    // host leaves it unsubstituted we must NOT try to write to that path.
+    if (!logPath || logPath.includes("${")) return undefined;
     let workflow = "unknown";
     let arm = "bridge";
     try {
@@ -44,7 +48,7 @@ export class EvalTelemetry {
     } catch {
       /* malformed metadata → defaults */
     }
-    return new EvalTelemetry(env.BB_EVAL_LOG, workflow, arm);
+    return new EvalTelemetry(logPath, workflow, arm);
   }
 
   constructor(

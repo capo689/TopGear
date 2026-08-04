@@ -53,6 +53,17 @@ by 33 open/pick interactions at machine speed + page load).
 - **Extension live-load** (`EXTENSION_LIVELOAD.md`): exact steps + a record-only template for
   Ace's first pass in real signed-in Chrome — the last genuine unknown; record what breaks,
   fix nothing on pass one.
+- **Telemetry is reachable from the INSTALLED bundle.** The manifest hardcoded `env` and had
+  no `user_config`, so `BB_EVAL_LOG` could never be set on an installed `.mcpb` — the recorder
+  would silently record nothing. Fixed: a `user_config` block (`eval_log_path` string, optional;
+  `headless` boolean, default true) wired into `mcp_config.env` via the spec's `${user_config.KEY}`
+  substitution (verified against the MCPB MANIFEST spec — env substitution is documented; the
+  `.mcpb` `mcpb validate` passes). Server hardened for the two things the spec does NOT document:
+  a boolean rendered into an env string (tolerant `^(false|0|no|off)$` check) and an unset
+  optional string left as a literal placeholder (`fromEnv` treats a value containing `${` as
+  disabled — never writes to that path). PROVEN on the packed bundle: install-style run with
+  `eval_log_path` set → JSONL written; unsubstituted placeholder → no file; `headless:false` →
+  headed launch (visible window is Ace's display).
 
 ## M0 — Foundations, baseline, and security skeleton — COMPLETE (pending external review)
 

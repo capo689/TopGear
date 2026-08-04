@@ -26,7 +26,10 @@ async function main(): Promise<void> {
     process.stderr.write(`browser-bridge: extension relay listening on ${socketPath} — load the extension and click "Grant Operate on this tab"\n`);
     backend = new ExtensionBackend(relay.transport);
   } else {
-    backend = await createPlaywrightBackend({ headless: process.env.BB_HEADLESS !== "false" });
+    // Tolerant of however the MCPB host renders a boolean user_config value into the env
+    // string (the spec doesn't pin it): headless UNLESS it clearly reads false. Default headless.
+    const headless = !/^(false|0|no|off)$/i.test((process.env.BB_HEADLESS ?? "").trim());
+    backend = await createPlaywrightBackend({ headless });
   }
 
   const daemon = new Daemon({ backend, harvestBackend });
