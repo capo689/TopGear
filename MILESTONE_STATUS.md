@@ -34,6 +34,26 @@ actions, which trips `BatchCapError` (>30), so it is not a 1-shot here either.
 each unrecognized widget is a likely miss. Wall-clock is measured, not predicted (dominated
 by 33 open/pick interactions at machine speed + page load).
 
+### Benchmark prep (for Fable's live run)
+
+- **The real `browser-bridge.mcpb` is built** (isolated Playwright mode; esbuild bundle +
+  bundled Playwright 1.62.1; needs Chromium in the Playwright cache). Verified live over MCP
+  stdio: exactly the **8 tools** (bridge_attach/view/act/fill_record/run_pattern/harvest/
+  screenshot/confirm — plan §11, no ninth), and a real `bridge_attach` drove Chromium and
+  returned an `initialView`. This is the channel Ace installs so ONE model drives both arms.
+- **Live-tier recorder is real, not a chat window.** The daemon (only in-process component
+  during a live run) now reports `pageLoadMs` per batch (navigation-settle time — it is the
+  only thing that knows when the page settled) and, when `BB_EVAL_LOG` is set, writes one
+  structured JSONL event per attach/view/act with: workflow, arm, runIndex, targetUrl, tool,
+  wallMs, pageLoadMs, fieldsAttempted, fieldsVerified, interrupted, status, ts (run metadata
+  from `BB_EVAL_RUN`). `packages/evals/live-recorder` aggregates events → per-run records
+  (all required fields incl. wall-minus-page-load and gates) and `live-summarize` emits the
+  reproducible comparison table. Proven END-TO-END: ran the packed `.mcpb` with `BB_EVAL_LOG`
+  set, drove attach+act, and the summarizer produced the table from the emitted events.
+- **Extension live-load** (`EXTENSION_LIVELOAD.md`): exact steps + a record-only template for
+  Ace's first pass in real signed-in Chrome — the last genuine unknown; record what breaks,
+  fix nothing on pass one.
+
 ## M0 — Foundations, baseline, and security skeleton — COMPLETE (pending external review)
 
 **Release target:** none (M0 gates M1). **Built on:** 2026-08-01.

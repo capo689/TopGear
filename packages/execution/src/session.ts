@@ -128,6 +128,7 @@ export class Session {
   private readonly revisioner = new Revisioner();
   private readonly fingerprints = new Map<string, LocatorFingerprint>();
   private captureSeq = 0;
+  private navMs = 0; // navigation-settle time accumulated within the current act() batch
   private readonly ttl: number;
 
   constructor(private readonly deps: SessionDeps) {
@@ -161,6 +162,7 @@ export class Session {
     const caps = checkBatchCaps(batch.actions);
     if (!caps.ok) throw new BatchCapError(caps);
 
+    this.navMs = 0; // accumulates navigation-settle time during this batch (page-load ms)
     let working = await this.capture();
     this.revisioner.commit(working);
 
@@ -183,7 +185,9 @@ export class Session {
 
       if (step.pageChanged) {
         const before = working;
-        working = await this.capture();
+        const t0 = performance.now();
+        working = await this.capture(); // waiting out the navigation settle here = page-load time
+        this.navMs += performance.now() - t0;
         this.revisioner.evaluate(working);
         const nav = this.detectNavigation(before, working);
         if (nav) {
@@ -205,7 +209,7 @@ export class Session {
     // interruption the fresh state already lives in the interruption's own view, so skip.
     const finalView = interruption ? working : await this.capture();
     const invalidFields = finalView.elements.filter((e) => e.invalid).map(rawToRecord);
-    const result: BatchResult = { status, revision: this.revisioner.current, completed, results };
+    const result: BatchResult = { status, revision: this.revisioner.current, completed, results, pageLoadMs: Math.round(this.navMs) };
     if (interruption) result.interruption = interruption;
     if (invalidFields.length) result.invalidFields = invalidFields;
     return result;
@@ -392,7 +396,9 @@ export class Session {
     if (authz.decision === "needs_confirmation") {
       return this.confirmationStep(action.op, label, authz);
     }
+    const t0 = performance.now();
     await this.deps.page.goto(url);
+    this.navMs += performance.now() - t0; // the goto's own settle counts as page-load time
     this.audit(action.op, label, authz.audit.code, "verified");
     return { results: [{ target: label, status: "verified" }], pageChanged: true };
   }

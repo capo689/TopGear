@@ -65,5 +65,11 @@ export const BatchResult = z.object({
   results: z.array(ActionResult),
   interruption: Interruption.optional(),
   invalidFields: z.array(ElementRecord).optional(),
+  /**
+   * Milliseconds the daemon spent waiting for navigation to settle during this batch (goto +
+   * post-navigation re-capture). The daemon is the only component that knows when the page
+   * settled, so it reports it here for the live-tier eval recorder to subtract from wall clock.
+   */
+  pageLoadMs: z.number().nonnegative().optional(),
 });
 export type BatchResult = z.infer<typeof BatchResult>;
