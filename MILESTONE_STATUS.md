@@ -5,6 +5,73 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## WAVE "PROVE THE CORE ON REALITY" — results so far (Gates A and B PASS; C/D2/D3 open)
+
+**§0 precision item — ANSWERED.** `readElementState`'s branches are `if/else if` on `tag`, and
+`role === "combobox"` is only the FINAL `else if`. Greenhouse's widget is `<input role="combobox">`,
+so **`tag === "input"` fires first** and returns the cleared search input's `.value`; the
+`role=combobox` branch NEVER executes for it. (My first report said "aria-selected text of the
+listbox" — that was wrong; the second report was right. The fix landed on the branch that runs.)
+
+**GATE A — PASS, 15/15** on the live Discord form (per-field table in the D1 section below).
+**GATE B — PASS, 5/5** live harvest (first ever live run of the scrape leg; table below).
+**Still open:** Track C harness, submit-truth on a controlled form, D2 (pageLoadMs), D3
+(fill_record telemetry), full-suite clean-install count. Not aggregated into a pass.
+
+### GATE A — form leg, per field (live Discord form, real options, ladder actuation UNCHANGED)
+
+| field | intended | committed value read | signal | verified |
+|---|---|---|---|---|
+| country | United States +1 | +1 | display | YES |
+| candidate-location | Ankara, Ankara Province, Turkey | Ankara, Ankara Province, Turkey | display | YES |
+| school--0 | Aalborg University | Aalborg University | display | YES |
+| degree--0 | Associate's Degree | Associate's Degree | display | YES |
+| discipline--0 | Accounting | Accounting | display | YES |
+| question_35445162002 (work auth) | Yes | Yes | display | YES |
+| question_35445163002 (in US) | Yes | Yes | display | YES |
+| question_35445164002 (relocate) | Yes | Yes | display | YES |
+| 4033064002 Gender | Male | Male | display | YES |
+| 4033065002 Race/Ethnicity | American Indian or Alaska Native | American Indian or Alaska Native | display | YES |
+| 4033066002 Veteran | I am not a protected veteran | I am not a protected veteran | display | YES |
+| 4033067002 Disability | Yes, I have a disability, or have had one in the past | (same) | display | YES |
+| 4033068002 Gender Identity | Man | Man | display | YES |
+| 4033069002 Race (optional) | Black or of African descent | Black or of African descent | display | YES |
+| 4033070002 LGBTQ+ | Yes | Yes | display | YES |
+
+**15/15.** Every field also read `committedValue = (none)` BEFORE its pick (fail-closed intact per
+field) and `invalid = false` after (the false-flagging is gone). All 15 resolved via the `display`
+signal — no hidden carrier exists on Greenhouse; the carrier branch is exercised by Workday/Lever
+in Track C. Guardrails, each live-verified:
+- **G1 value-matching, NOT presence-checking:** negative control on GitLab — committing "United
+  Kingdom" while intending "United States of America" **FAILS** verification. Confirmed.
+- **G2 fail closed:** pre-commit reads resolve nothing → `committedValue` absent → verification
+  fails. Also removed `applySearchPick`'s "we clicked something with a name ⇒ ok" fallback.
+- **G3 verifier cannot certify itself:** cross-checked against react-select's OWN aria-live
+  announcement `"option United States of America, selected."` — emitted by the widget, not read
+  off the element under test.
+
+**Two false starts worth recording (scope is the whole game):** a fixed-depth ancestor walk and a
+class-name heuristic BOTH escaped the field and read a NEIGHBOURING widget's value (every field
+returned the phone widget's "+1"). The fix is a measured invariant: climb while the ancestor holds
+EXACTLY ONE combobox, stop at the shared group. A third failure was in the HARNESS, not the
+product — reusing one `data-bb-ref` across fields made `querySelector` always return the first match.
+
+### GATE B — scrape leg, first live run (5 real GitLab postings)
+
+`bridge_run_pattern` → `{requested:5, harvested:5, deduped:0, skipped:[], exceptions:[]}`.
+
+| measure | result |
+|---|---|
+| pages harvested | **5/5**, zero exceptions |
+| turns | **3** (attach → run_pattern → harvest) |
+| wall clock (harvest) | ~440 ms for 5 pages ≈ **11 pages/sec** |
+| corpus queryable | YES — `list` returns 5 distinct real titles; `search "DevSecOps"` returns full records |
+| fidelity | **faithful, no truncation** — full descriptions end-to-end (overview → what you'll do → what you'll bring → about the team → benefits → EEO → full disability list → closing PUBLIC BURDEN STATEMENT) |
+| INV-6 | content stayed local (harvest store), nothing contributed |
+
+No reality gap found in the scrape leg on this vendor. Generalization to a 2nd content site is
+Track C's C2 and is NOT claimed here.
+
 ## D1 DIAGNOSIS — combobox actuation (live, before any fix) → WORLD B (verifying blind)
 
 Measured against TWO real Greenhouse forms (GitLab `question_…` country-of-residence, and the
