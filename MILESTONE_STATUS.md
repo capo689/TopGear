@@ -50,6 +50,26 @@ in Track C. Guardrails, each live-verified:
   announcement `"option United States of America, selected."` — emitted by the widget, not read
   off the element under test.
 
+### Negative controls re-run against SHIPPED code (6d5f5f3) — the earlier G1 predated 3 rewrites
+
+The first G1 control ran before `resolveCommitted`'s scope was rewritten three times, so it did
+not certify the shipped resolver. Re-run against the shipped build:
+
+| control | result |
+|---|---|
+| **(a) wrong value** — commit "Yes", verify against "No" | **FAIL ✅** (correct — no false success). Sanity: verify vs actual "Yes" → PASS |
+| **(b) cross-field leak** — commit "Male" in Gender, verify UNTOUCHED Race against "Male" | untouched Race `committedValue = undefined` → verify **FAIL ✅** (no leak). This is the exact failure mode the "+1" bleed proved live, now controlled against |
+| **(c) `invalid` false-negative** — does an EMPTY required field still report invalid? | **YES ✅** — empty required `firstName` and `agreeTerms` both `invalid=true`; filling `firstName` clears it to false. No false negative introduced by the false-positive fix |
+
+**Honest caveat on (c):** the control is **inconclusive on Greenhouse** — its required fields are
+`aria-required` only, so native `checkValidity()` returns `true` even when empty and the page never
+reported them invalid at all. The meaningful control had to run where native validity actually
+fires (real `required` attributes). Recorded rather than glossed: on aria-required-only forms the
+`invalid` signal carries no information either before or after this change.
+
+**Clean-install full suite after the verifier change: 258 tests / 43 tasks green, build 25/25**
+(unchanged from the pre-change count — no regression in the shared read paths).
+
 **Two false starts worth recording (scope is the whole game):** a fixed-depth ancestor walk and a
 class-name heuristic BOTH escaped the field and read a NEIGHBOURING widget's value (every field
 returned the phone widget's "+1"). The fix is a measured invariant: climb while the ancestor holds
