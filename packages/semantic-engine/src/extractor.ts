@@ -20,10 +20,65 @@ export function readElementState(ref: string): ElementStateResult {
   let value: string | undefined;
   let selectedLabel: string | undefined;
   let checked: boolean | undefined;
+  let committedValue: string | undefined;
+  let committedSignal: ElementStateResult["committedSignal"];
+
+  /**
+   * D1 (live-measured on Greenhouse/react-select): resolve the COMMITTED selection for a
+   * combobox — the value the form actually submits — in strict precedence:
+   *   1. a named hidden carrier (Workday / some Lever forms use one),
+   *   2. else the rendered committed-selection display (react-select .select__single-value
+   *      or an equivalent selected-value node),
+   *   3. NEVER the search input — react-select CLEARS it on commit, which is exactly the
+   *      false-failure source.
+   * Returns undefined when nothing resolves, so the caller fails closed (G2).
+   */
+  function resolveCommitted(node: Element): { value: string; signal: "carrier" | "display" } | undefined {
+    // SCOPE IS THE WHOLE GAME. Measured on the live Discord form: a class-name heuristic and a
+    // fixed-depth walk BOTH escape the field and read a NEIGHBOURING widget's value (every field
+    // returned the phone widget's "+1"). The robust, measured invariant: climb while the
+    // ancestor still contains EXACTLY ONE combobox — the moment it contains more, we have left
+    // this widget and entered a shared group. So one combobox can never read another's value.
+    let scope: Element | null = null;
+    let box: Element = node;
+    for (let i = 0; i < 10 && box.parentElement; i++) {
+      const parent: Element = box.parentElement;
+      const combos = parent.querySelectorAll('[role="combobox"], select').length;
+      if (combos > 1) break; // shared group → stop BEFORE it
+      scope = parent;
+      box = parent;
+    }
+    if (!scope) return undefined; // no identifiable widget container → fail closed (G2)
+
+    // (1) a named hidden carrier inside THIS widget holding a non-empty value
+    const carriers = scope.querySelectorAll('input[type="hidden"][name], select[name]');
+    for (let c = 0; c < carriers.length; c++) {
+      const cv = (carriers[c] as unknown as { value?: string }).value ?? "";
+      if (cv.trim() !== "") return { value: cv.trim(), signal: "carrier" };
+    }
+    // (2) the rendered committed-selection display inside THIS widget. react-select renders
+    // single-value ONLY when a value is committed, so this cannot manufacture a selection.
+    const display = scope.querySelector(
+      '[class*="single-value"], [class*="singleValue"], [class*="multi-value__label"], [class*="multiValue"]',
+    );
+    const dt = display ? (display.textContent ?? "").replace(/\s+/g, " ").trim() : "";
+    if (dt !== "") return { value: dt, signal: "display" };
+    return undefined;
+  }
+
   if (tag === "input") {
     const t = (el.getAttribute("type") ?? "text").toLowerCase();
     if (t === "checkbox" || t === "radio") checked = anyEl.checked;
     else if (t !== "password") value = anyEl.value;
+    // An <input role="combobox"> (react-select et al) hits THIS branch, not the role branch
+    // below — so the committed-value resolution must live here too.
+    if (el.getAttribute("role") === "combobox") {
+      const c = resolveCommitted(el);
+      if (c) {
+        committedValue = c.value;
+        committedSignal = c.signal;
+      }
+    }
   } else if (tag === "textarea") {
     value = anyEl.value;
   } else if (tag === "select") {
@@ -38,11 +93,19 @@ export function readElementState(ref: string): ElementStateResult {
     const selected = list?.querySelector('[aria-selected="true"]');
     value = selected ? (selected.textContent ?? "").replace(/\s+/g, " ").trim() : undefined;
     selectedLabel = value; // a combobox's rendered value IS its label
+    const c = resolveCommitted(el);
+    if (c) {
+      committedValue = c.value;
+      committedSignal = c.signal;
+    }
   }
   const disabled = anyEl.disabled === true || el.getAttribute("aria-disabled") === "true";
-  const invalid =
+  // A committed combobox is NOT invalid just because its search input is empty: react-select
+  // clears that input on commit, so checkValidity() false-flags a field whose value landed.
+  const nativeInvalid =
     el.getAttribute("aria-invalid") === "true" ||
     (typeof anyEl.checkValidity === "function" ? !anyEl.checkValidity() : false);
+  const invalid = nativeInvalid && !(committedValue !== undefined && el.getAttribute("aria-invalid") !== "true");
   const style = getComputedStyle(el as Element);
   const visible =
     !(el as HTMLElement).hidden &&
@@ -52,6 +115,10 @@ export function readElementState(ref: string): ElementStateResult {
   const out: ElementStateResult = { found: true, disabled, invalid, visible };
   if (value !== undefined && value !== "") out.value = value;
   if (selectedLabel !== undefined && selectedLabel !== "") out.selectedLabel = selectedLabel;
+  if (committedValue !== undefined && committedValue !== "") {
+    out.committedValue = committedValue;
+    if (committedSignal) out.committedSignal = committedSignal;
+  }
   if (checked !== undefined) out.checked = checked;
   return out;
 }

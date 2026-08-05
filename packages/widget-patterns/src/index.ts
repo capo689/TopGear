@@ -31,10 +31,31 @@ function isCustomCombobox(el: RawElement): boolean {
   return el.role === "combobox" || el.widgetKind === "custom-combobox";
 }
 
+/**
+ * Verify a combobox committed the INTENDED value (D1, live-measured on Greenhouse/react-select).
+ *
+ * Reads the COMMITTED value — hidden carrier if present, else the rendered selected-value
+ * display — never the search input, which react-select clears on commit (the false-failure
+ * source). Guardrails:
+ *   G1 value-matching, not presence-checking: the committed text must MATCH `wanted`; a
+ *      combobox that committed some OTHER option still fails.
+ *   G2 fail closed: if no committed signal resolves, this returns false (verification_mismatch).
+ *      "I could not find where the value landed" is never success.
+ */
+function matchesWanted(observed: string, wanted: string): boolean {
+  const o = observed.trim().toLowerCase();
+  const w = wanted.trim().toLowerCase();
+  // Directional containment only (observed ⊇ wanted, or wanted ⊇ observed for a truncated
+  // display) — never "non-empty ⇒ pass".
+  return o === w || o.includes(w) || w.includes(o);
+}
+
 async function verifyContains(page: BrowserPage, ref: string, wanted: string): Promise<boolean> {
   const s = await page.readState(ref);
-  if (s.value === undefined) return false;
-  return s.value === wanted || s.value.includes(wanted);
+  if (s.committedValue !== undefined) return matchesWanted(s.committedValue, wanted); // G1 + G2
+  if (s.selectedLabel !== undefined && matchesWanted(s.selectedLabel, wanted)) return true;
+  if (s.value === undefined) return false; // G2: no signal → fail
+  return matchesWanted(s.value, wanted);
 }
 
 /** The `select` primitive: native select or a custom ARIA combobox. */
@@ -127,9 +148,10 @@ export async function applySearchPick(
   const clicked = fromPrimitive(await page.click(chosen.ref));
   if (!clicked.ok) return clicked;
 
-  const state = await page.readState(element.ref);
   const wanted = typeof pick === "object" ? (chosen.name ?? "") : pick;
-  if (state.value !== undefined && (state.value === wanted || state.value.includes(wanted))) return { ok: true };
-  // Some comboboxes reflect selection into the trigger text, not a value attribute.
-  return chosen.name ? { ok: true } : { ok: false, reason: "error", detail: "no post-pick state observed" };
+  // Same committed-value verification as applySelect: carrier → rendered display → never the
+  // (cleared) search input. Previously this fell back to "we clicked something with a name ⇒ ok",
+  // which could report success without observing a commit — removed (G2: fail closed).
+  if (await verifyContains(page, element.ref, wanted)) return { ok: true };
+  return { ok: false, reason: "error", detail: "combobox value did not update after selection" };
 }

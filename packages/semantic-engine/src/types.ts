@@ -85,6 +85,15 @@ export interface ElementStateResult {
    * EITHER, so requesting "Oregon" against <option value="OR">Oregon</option> verifies.
    */
   selectedLabel?: string;
+  /**
+   * The COMMITTED selection for a combobox — the value the form actually submits — resolved
+   * from a named hidden carrier if one exists, else the rendered selected-value display.
+   * NEVER the search input (react-select clears it on commit). Absent when nothing resolved,
+   * so verification fails closed rather than guessing.
+   */
+  committedValue?: string;
+  /** Which signal produced `committedValue` (for honest per-field reporting). */
+  committedSignal?: "carrier" | "display";
   checked?: boolean;
   disabled: boolean;
   invalid: boolean;
