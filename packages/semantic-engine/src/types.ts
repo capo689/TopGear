@@ -94,6 +94,15 @@ export interface ElementStateResult {
   committedValue?: string;
   /** Which signal produced `committedValue` (for honest per-field reporting). */
   committedSignal?: "carrier" | "display";
+  /**
+   * D4: for a combobox, whether its listbox is OPEN and its options are therefore
+   * observable right now. `true` open, `false` closed, ABSENT when the runtime cannot
+   * tell. Three states, never two: "I could not look" and "there is nothing there" are
+   * different facts and callers act differently on each.
+   */
+  listboxOpen?: boolean;
+  /** Which signal produced `listboxOpen` (for honest reporting). */
+  listboxSignal?: "listbox-visible" | "aria-expanded";
   checked?: boolean;
   disabled: boolean;
   invalid: boolean;

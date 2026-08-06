@@ -657,10 +657,24 @@ function primitiveFailure(out: { ok: false; reason: string; detail?: string; ava
   }
 }
 
-function widgetFailure(out: { ok: false; reason: string; availableOptions?: string[]; widgetHint?: string; detail?: string }): FailureDetail {
+function widgetFailure(out: {
+  ok: false;
+  reason: string;
+  availableOptions?: string[];
+  widgetHint?: string;
+  detail?: string;
+  widgetState?: "closed" | "unknown";
+}): FailureDetail {
   switch (out.reason) {
     case "option_not_found":
       return { reason: "option_not_found", availableOptions: out.availableOptions ?? [] };
+    // D4(b): never downgrade this to option_not_found:[] — that would re-assert the lie.
+    case "options_not_visible":
+      return {
+        reason: "options_not_visible",
+        widgetState: out.widgetState ?? "unknown",
+        ...(out.detail ? { detail: out.detail } : {}),
+      };
     case "widget_unrecognized":
       return { reason: "widget_unrecognized", ...(out.widgetHint ? { widgetHint: out.widgetHint } : {}) };
     case "disabled":

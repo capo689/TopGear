@@ -5,6 +5,78 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## D4 — CLOSED. Probe state leak + false empty-option report (both halves fixed, artifact-gated)
+
+**The defect, as measured.** A probe that took the `option_not_found` path left the widget's
+listbox OPEN. The next action on the SAME widget clicked the trigger, which TOGGLED that listbox
+shut, and the runtime then reported `option_not_found, availableOptions: []` — indistinguishable
+from a field that genuinely has no options. Two defects: **(a)** the state leak, **(b)** the runtime
+asserting "there is nothing there" when the truth was "I could not look".
+
+**Reproduced first, in the fixture farm, against the PRE-FIX playbook** (not asserted — run):
+
+```
+TEACH:   {"ok":false,"reason":"option_not_found","availableOptions":["React","Vue","Svelte","Solid"]}
+RECOVER: {"ok":false,"reason":"option_not_found","availableOptions":[]}      ← the exact live lie
+```
+
+The same two calls against the fixed playbook return `RECOVER: {"ok":true}`.
+
+**The fix.**
+- (a) `restoreClosed` (`packages/widget-patterns/src/index.ts`) puts the widget back in a
+  VERIFIED-closed state on every exit path of `applySelect`/`applySearchPick` — Escape first, then
+  a trigger activation for widgets that ignore Escape, each confirmed by read-back. `openListbox`
+  is idempotent: it reads state first and does not click a widget that is already open. One
+  recovery pass reopens and re-polls when the listbox reads not-open, so poisoning arriving from
+  OUTSIDE the call is absorbed rather than reported.
+- (b) New typed failure `options_not_visible` (`packages/protocol/src/result.ts`) carrying
+  `widgetState: "closed" | "unknown"`. `availableOptions: []` is now emitted ONLY when the listbox
+  is demonstrably open. The observation backing it is `ElementStateResult.listboxOpen`, which is
+  THREE-state (`true` / `false` / absent) precisely so "I could not look" cannot collapse into
+  "there is nothing there". Options seen while THIS widget reads closed belong to another open
+  listbox and are never reported as this field's options.
+
+**GATE — PASS 8/8, through the SHIPPING ARTIFACT** (`scripts/gate-d4.mjs`: unpacks the `.mcpb`,
+spawns its own `server/index.js`, drives the 8-tool MCP surface over stdio).
+Artifact sha256 `b07ea0041928e6055cb2e202f099e307223acfd4f4fe9b09db5416574f4d8406`, built
+2026-08-06T04:15:34Z, fingerprint inside the bundle `{options_not_visible:true, listboxOpen:true}`.
+
+| check | evidence |
+|---|---|
+| MCP surface is the 8 tools | bridge_act, attach, confirm, fill_record, harvest, run_pattern, screenshot, view |
+| teach returns the real list | `{"reason":"option_not_found","availableOptions":["React","Vue","Svelte","Solid"]}` |
+| **recover on the VERY NEXT call, same widget, nothing in between** | `{"target":"Framework","status":"verified"}` |
+| teach → recover on a widget that ignores Escape | `option_not_found` → `{"target":"Plan","status":"verified"}` |
+| **negative control:** OPEN listbox, genuinely no options | `{"reason":"option_not_found","availableOptions":[]}` |
+| **cannot look** | `{"reason":"options_not_visible","widgetState":"closed","detail":"the listbox is closed, so this widget's options could not be read; reopen it and retry"}` |
+| the two are distinguishable by reason alone | `option_not_found` vs `options_not_visible` |
+| no regression on the other library widgets | Region, Tier, Async city, Rerender color all verified |
+
+**LIVE confirmation — 9/10, same artifact** (`scripts/gate-d4-live.mjs`, live react-select on
+`job-boards.greenhouse.io/gitlab/jobs/8620720002`, 10 real comboboxes, selects only, never
+submitted). Every field taught its real options and then verified on the immediately following
+call, including the exact EEOC block D4 was found on (Gender, Hispanic/Latino, Veteran Status,
+Disability Status). **Zero fields reported the ambiguous `availableOptions: []`.**
+
+The 1 non-verify is NOT D4 and is honest fail-closed: the phone-country widget commits a display
+of `+1` for the option labelled `United States +1`, so the daemon's verifier returns
+`{"reason":"verification_mismatch","expected":"United States +1","observed":"+1"}`. The value DID
+commit; the daemon's `verify()` matcher is deliberately one-directional (observed ⊇ wanted) so a
+partially-committed value cannot pass. **Open item (not D4):** `widget-patterns.matchesWanted` is
+BIDIRECTIONAL while `session.ts.verify` is one-directional — two verifiers with different rules,
+and this field is where they disagree. Flagged, deliberately not "fixed" by loosening the guardrail.
+
+**Tests.** `packages/widget-patterns/src/gauntlet.test.ts` gains 5 D4 cases (all run against real
+Chromium + the fixture farm, no mocks). New fixture widgets in
+`apps/fixture-farm/public/widgets/library-widgets.html`: `Empty roster` (opens, genuinely zero
+options), `Stuck menu` (never opens for a click → unreadable), `Portal fruit` (no ARIA open/closed
+signal at all → `unknown`), plus an Escape-ignoring variant. Full suite: 43/43 Turbo tasks green.
+
+**D5 (from the same report) — not addressed here.** Updating an `.mcpb` silently wipes
+`user_config` (eval_log_path, headless), so telemetry goes off without warning. Still open.
+
+---
+
 ## WAVE "PROVE THE CORE ON REALITY" — results (Gate B PASS; Gate A 13/14 via artifact; C/D2/D3 open)
 
 > ⚠ **RETRACTION — the "GATE A — PASS, 15/15" section below is SUPERSEDED and INVALID.** It was

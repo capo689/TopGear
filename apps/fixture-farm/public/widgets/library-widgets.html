@@ -55,6 +55,28 @@
       <ul id="lb-rerender" role="listbox" hidden></ul>
       <input type="hidden" id="v-rerender" /></div>
 
+    <!-- D4 negative control: this widget OPENS (aria-expanded=true, listbox on screen) and
+         genuinely has no options. It must stay distinguishable from a widget whose listbox
+         the runtime could not read. -->
+    <div class="combo" id="c-empty"><label id="l-empty">Empty roster</label>
+      <button class="trigger" id="t-empty" role="combobox" aria-expanded="false" aria-controls="lb-empty" aria-labelledby="l-empty">Select…</button>
+      <ul id="lb-empty" role="listbox" hidden></ul>
+      <input type="hidden" id="v-empty" /></div>
+
+    <!-- D4: a widget whose menu never opens on a click (it wants a gesture the runtime did
+         not make). Its options are UNREADABLE and it reports closed the whole time, so the
+         honest answer is "I could not look", not "there is nothing there". -->
+    <div class="combo" id="c-stuck"><label id="l-stuck">Stuck menu</label>
+      <button class="trigger" id="t-stuck" role="combobox" aria-expanded="false" aria-controls="lb-stuck" aria-labelledby="l-stuck">Select…</button>
+      <ul id="lb-stuck" role="listbox" hidden><li role="option" data-value="Hidden">Hidden</li></ul></div>
+
+    <!-- D4 third state: no aria-expanded, no aria-controls, menu portalled to <body>. The
+         runtime cannot observe whether this is open, so it must report `unknown` rather
+         than claiming a state it cannot see. -->
+    <div class="combo" id="c-portal"><label id="l-portal">Portal fruit</label>
+      <button class="trigger" id="t-portal" role="combobox" aria-labelledby="l-portal">Select…</button>
+      <input type="hidden" id="v-portal" /></div>
+
     <div class="combo" id="c-type"><label id="l-type">Typeahead country</label>
       <input class="trigger" id="t-type" role="combobox" aria-expanded="false" aria-controls="lb-type" aria-labelledby="l-type" aria-autocomplete="list" autocomplete="off" placeholder="Type…" />
       <ul id="lb-type" role="listbox" hidden></ul>
@@ -84,7 +106,12 @@
           trigger.tagName === "INPUT" ? (trigger.value = value) : (trigger.textContent = value);
           close();
         }
+        // A trigger click TOGGLES — this is what real widgets do, and it is why a probe that
+        // leaves a listbox open poisons the next action on the same widget (D4).
         trigger.addEventListener("click", () => (list.hidden ? open() : close()));
+        // Most libraries close on Escape; `noEscape` models the ones that do not, so the
+        // runtime's second close strategy (a trigger activation) gets exercised too.
+        if (!opts.noEscape) trigger.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
         list.addEventListener("click", (e) => { const li = e.target.closest('[role="option"]'); if (li && li.dataset.value) choose(li.dataset.value); });
         if (opts.typeahead) {
           trigger.addEventListener("input", () => {
@@ -97,7 +124,32 @@
       makeCombo("react", ["React", "Vue", "Svelte", "Solid"]);
       makeCombo("radix", ["North", "South", "East", "West"]);
       makeCombo("mui", ["Free", "Pro", "Enterprise"]);
-      makeCombo("ant", ["Basic", "Standard", "Premium"]);
+      makeCombo("ant", ["Basic", "Standard", "Premium"], { noEscape: true });
+      makeCombo("empty", []);
+
+      // Portalled menu with no ARIA open/closed signal at all.
+      (function makePortalCombo(id, items) {
+        const trigger = document.getElementById("t-" + id);
+        const hidden = document.getElementById("v-" + id);
+        let menu = null;
+        function close() { if (menu) { menu.remove(); menu = null; } }
+        function open() {
+          const r = trigger.getBoundingClientRect();
+          menu = document.createElement("ul");
+          menu.setAttribute("role", "listbox");
+          menu.style.cssText = `position:absolute;left:${r.left}px;top:${r.bottom}px;width:${r.width}px;margin:0;padding:0;list-style:none;border:1px solid #999;background:#fff;z-index:3;`;
+          menu.innerHTML = optionsHtml(items, hidden.value);
+          menu.addEventListener("click", (e) => {
+            const li = e.target.closest('[role="option"]');
+            if (!li || !li.dataset.value) return;
+            hidden.value = li.dataset.value;
+            trigger.textContent = li.dataset.value;
+            close();
+          });
+          document.body.appendChild(menu);
+        }
+        trigger.addEventListener("click", () => (menu ? close() : open()));
+      })("portal", ["Apple", "Pear", "Plum"]);
       makeCombo("async", ["Bend", "Portland", "Seattle"], { async: true });
       makeCombo("rerender", ["Red", "Green", "Blue"], { rerender: true });
       makeCombo("type", ["United States", "United Kingdom", "Canada", "Australia"], { typeahead: true });

@@ -22,6 +22,68 @@ export function readElementState(ref: string): ElementStateResult {
   let checked: boolean | undefined;
   let committedValue: string | undefined;
   let committedSignal: ElementStateResult["committedSignal"];
+  let listboxOpen: boolean | undefined;
+  let listboxSignal: ElementStateResult["listboxSignal"];
+
+  function nodeVisible(n: Element): boolean {
+    const st = getComputedStyle(n);
+    return (
+      !(n as HTMLElement).hidden &&
+      st.display !== "none" &&
+      st.visibility !== "hidden" &&
+      (n as HTMLElement).getClientRects().length > 0
+    );
+  }
+
+  /**
+   * The widget container for `node`: climb while the ancestor still contains EXACTLY ONE
+   * combobox. The moment it contains more, we have left this widget and entered a shared
+   * group — so one combobox can never read another's value or listbox. (Measured on the
+   * live Discord form, where a class-name heuristic and a fixed-depth walk both escaped
+   * the field and read a NEIGHBOURING widget.)
+   */
+  function widgetScope(node: Element): Element | null {
+    let scope: Element | null = null;
+    let box: Element = node;
+    for (let i = 0; i < 10 && box.parentElement; i++) {
+      const parent: Element = box.parentElement;
+      const combos = parent.querySelectorAll('[role="combobox"], select').length;
+      if (combos > 1) break; // shared group → stop BEFORE it
+      scope = parent;
+      box = parent;
+    }
+    return scope;
+  }
+
+  /**
+   * D4(b), live-measured on Greenhouse: resolve whether this combobox's listbox is OPEN.
+   * The runtime must be able to distinguish "the listbox is open and holds no options"
+   * from "the listbox is closed so I could not read any options" — reporting the second
+   * as the first is the runtime lying. Returns undefined when NEITHER can be established,
+   * so the caller reports `unknown` rather than inventing a state.
+   *
+   * Precedence: what we can SEE beats what the widget claims.
+   *   1. the owned listbox is on screen WITH options → open (we can literally see them),
+   *   2. aria-expanded true/false → the widget's own claim,
+   *   3. the owned listbox exists but is off screen → closed,
+   *   4. the owned listbox is on screen but empty → open (an empty open listbox),
+   *   5. no owned listbox and no aria-expanded → a visible listbox inside THIS widget.
+   */
+  function resolveListboxOpen(node: Element): { open: boolean; signal: "listbox-visible" | "aria-expanded" } | undefined {
+    const owned = node.getAttribute("aria-controls") ?? node.getAttribute("aria-owns");
+    // Portalled menus (react-select, Radix) live outside the widget, so resolve by id first.
+    const list = owned ? document.getElementById(owned) : null;
+    const listShown = list !== null && nodeVisible(list);
+    if (listShown && list.querySelector('[role="option"]') !== null) return { open: true, signal: "listbox-visible" };
+    const exp = node.getAttribute("aria-expanded");
+    if (exp === "true") return { open: true, signal: "aria-expanded" };
+    if (exp === "false") return { open: false, signal: "aria-expanded" };
+    if (list) return { open: listShown, signal: "listbox-visible" };
+    const scope = widgetScope(node);
+    const inScope = scope ? scope.querySelector('[role="listbox"], [role="menu"]') : null;
+    if (inScope) return { open: nodeVisible(inScope), signal: "listbox-visible" };
+    return undefined; // cannot tell → never claim either way
+  }
 
   /**
    * D1 (live-measured on Greenhouse/react-select): resolve the COMMITTED selection for a
@@ -34,20 +96,8 @@ export function readElementState(ref: string): ElementStateResult {
    * Returns undefined when nothing resolves, so the caller fails closed (G2).
    */
   function resolveCommitted(node: Element): { value: string; signal: "carrier" | "display" } | undefined {
-    // SCOPE IS THE WHOLE GAME. Measured on the live Discord form: a class-name heuristic and a
-    // fixed-depth walk BOTH escape the field and read a NEIGHBOURING widget's value (every field
-    // returned the phone widget's "+1"). The robust, measured invariant: climb while the
-    // ancestor still contains EXACTLY ONE combobox — the moment it contains more, we have left
-    // this widget and entered a shared group. So one combobox can never read another's value.
-    let scope: Element | null = null;
-    let box: Element = node;
-    for (let i = 0; i < 10 && box.parentElement; i++) {
-      const parent: Element = box.parentElement;
-      const combos = parent.querySelectorAll('[role="combobox"], select').length;
-      if (combos > 1) break; // shared group → stop BEFORE it
-      scope = parent;
-      box = parent;
-    }
+    // SCOPE IS THE WHOLE GAME (see widgetScope): one combobox must never read another's value.
+    const scope = widgetScope(node);
     if (!scope) return undefined; // no identifiable widget container → fail closed (G2)
 
     // (1) a named hidden carrier inside THIS widget holding a non-empty value
@@ -78,6 +128,11 @@ export function readElementState(ref: string): ElementStateResult {
         committedValue = c.value;
         committedSignal = c.signal;
       }
+      const lb = resolveListboxOpen(el);
+      if (lb) {
+        listboxOpen = lb.open;
+        listboxSignal = lb.signal;
+      }
     }
   } else if (tag === "textarea") {
     value = anyEl.value;
@@ -97,6 +152,11 @@ export function readElementState(ref: string): ElementStateResult {
     if (c) {
       committedValue = c.value;
       committedSignal = c.signal;
+    }
+    const lb = resolveListboxOpen(el);
+    if (lb) {
+      listboxOpen = lb.open;
+      listboxSignal = lb.signal;
     }
   }
   const disabled = anyEl.disabled === true || el.getAttribute("aria-disabled") === "true";
@@ -120,6 +180,10 @@ export function readElementState(ref: string): ElementStateResult {
     if (committedSignal) out.committedSignal = committedSignal;
   }
   if (checked !== undefined) out.checked = checked;
+  if (listboxOpen !== undefined) {
+    out.listboxOpen = listboxOpen;
+    if (listboxSignal) out.listboxSignal = listboxSignal;
+  }
   return out;
 }
 
