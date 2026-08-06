@@ -14,40 +14,32 @@
  *
  * READ-ONLY with respect to the site: it selects dropdown values and NEVER submits.
  *
- * Usage: node scripts/gate-d4-live.mjs <url> [--max 3] [--artifact path.mcpb]
+ * Usage: node scripts/gate-d4-live.mjs [url] [--max 10] [--artifact p.mcpb] [--ephemeral]
+ *   (no url → LIVE_DEFAULT below; no artifact → THE distributable at its real path)
  */
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, existsSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
+import { resolveArtifact } from "./lib/artifact.mjs";
+
+/** A live react-select form of the shape D4 was measured on (Greenhouse). Selects only. */
+const LIVE_DEFAULT = "https://job-boards.greenhouse.io/gitlab/jobs/8620720002";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
-const url = argv.find((a) => !a.startsWith("--"));
 const flag = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-if (!url) {
-  console.error("usage: node scripts/gate-d4-live.mjs <url> [--max 3] [--artifact path.mcpb]");
-  process.exit(2);
-}
-const MAX = Number(flag("max", 3));
+const url = argv.find((a) => a.startsWith("http")) ?? LIVE_DEFAULT;
+const MAX = Number(flag("max", 10));
 
-let bundle = flag("artifact");
-if (!bundle) {
-  bundle = join(mkdtempSync(join(tmpdir(), "bb-gate-")), "browser-bridge.mcpb");
-  console.log("building the shipping artifact…");
-  execFileSync("node", [join(root, "scripts/build-mcpb.mjs"), bundle], { cwd: root, stdio: "inherit" });
-}
-if (!existsSync(bundle)) throw new Error(`no artifact at ${bundle}`);
-const sha = createHash("sha256").update(readFileSync(bundle)).digest("hex");
-const built = statSync(bundle).mtime.toISOString();
+const artifact = resolveArtifact(argv, root);
 
 const unpacked = mkdtempSync(join(tmpdir(), "bb-mcpb-run-"));
-execFileSync("unzip", ["-q", "-o", bundle, "-d", unpacked]);
+execFileSync("unzip", ["-q", "-o", artifact.path, "-d", unpacked]);
 const serverJs = join(unpacked, "server/index.js");
 const serverSrc = readFileSync(serverJs, "utf8");
 const fingerprint = {
@@ -55,9 +47,10 @@ const fingerprint = {
   listboxOpen: serverSrc.includes("listboxOpen"),
 };
 
-console.log(`\nartifact:    ${bundle}`);
-console.log(`built:       ${built}`);
-console.log(`sha256:      ${sha}`);
+console.log(`\nartifact:    ${artifact.path}`);
+console.log(`kind:        ${artifact.kind}`);
+console.log(`built:       ${artifact.built}`);
+console.log(`sha256:      ${artifact.sha256}`);
 console.log(`fingerprint: ${JSON.stringify(fingerprint)}`);
 console.log(`page:        ${url}\n`);
 

@@ -15,15 +15,16 @@
  *   NEGATIVE CONTROL   — a field that genuinely has no options still reports
  *                       option_not_found with an empty list, distinguishable from above.
  *
- * Usage: node scripts/gate-d4.mjs [path/to/browser-bridge.mcpb]
- *   (no argument → builds a fresh bundle into the OS temp dir first)
+ * Usage: node scripts/gate-d4.mjs [path/to/browser-bridge.mcpb] [--ephemeral]
+ *   (no argument → THE distributable at its real path; --ephemeral builds a throwaway and
+ *    says so, because a throwaway proves the code compiles, not that the shipped file works)
  */
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, existsSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash } from "node:crypto";
+import { resolveArtifact } from "./lib/artifact.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 34118;
@@ -31,18 +32,10 @@ const ORIGIN = `http://127.0.0.1:${PORT}`;
 const PAGE = `${ORIGIN}/widgets/library-widgets.html`;
 
 // ---------------------------------------------------------------- the artifact
-let bundle = process.argv[2];
-if (!bundle) {
-  bundle = join(mkdtempSync(join(tmpdir(), "bb-gate-")), "browser-bridge.mcpb");
-  console.log("building the shipping artifact…");
-  execFileSync("node", [join(root, "scripts/build-mcpb.mjs"), bundle], { cwd: root, stdio: "inherit" });
-}
-if (!existsSync(bundle)) throw new Error(`no artifact at ${bundle}`);
-const sha = createHash("sha256").update(readFileSync(bundle)).digest("hex");
-const built = statSync(bundle).mtime.toISOString();
+const artifact = resolveArtifact(process.argv.slice(2), root);
 
 const unpacked = mkdtempSync(join(tmpdir(), "bb-mcpb-run-"));
-execFileSync("unzip", ["-q", "-o", bundle, "-d", unpacked]);
+execFileSync("unzip", ["-q", "-o", artifact.path, "-d", unpacked]);
 const serverJs = join(unpacked, "server/index.js");
 const serverSrc = readFileSync(serverJs, "utf8");
 // Fingerprint the fix INSIDE the artifact, so the report cannot claim a build it did not run.
@@ -52,9 +45,11 @@ const fingerprint = {
   restoreClosed: serverSrc.includes("this widget's options could not be read"),
 };
 
-console.log(`\nartifact:    ${bundle}`);
-console.log(`built:       ${built}`);
-console.log(`sha256:      ${sha}`);
+console.log(`\nartifact:    ${artifact.path}`);
+console.log(`kind:        ${artifact.kind}`);
+console.log(`built:       ${artifact.built}`);
+console.log(`size:        ${artifact.size} bytes`);
+console.log(`sha256:      ${artifact.sha256}`);
 console.log(`fingerprint: ${JSON.stringify(fingerprint)}\n`);
 
 // ---------------------------------------------------------------- fixture farm

@@ -155,9 +155,24 @@ the builder) before the next milestone begins. Keep current at all times:
 Two failed attempts at the same bug → stop, write up what you know in
 `MILESTONE_STATUS.md`, and flag for escalation rather than thrashing.
 
-## Gate integrity (standing rule, added after the third artifact/source divergence)
+## Gate integrity (standing rule, sharpened after the FOURTH divergence)
 
-- **Any gate claiming a capability works MUST exercise the artifact that ships** — the built
-  `.mcpb` driven through the MCP tool surface, not source, dist, or a direct Playwright script.
-  A gate that bypasses the shipping artifact is not a gate. Rebuild (`pnpm build:mcpb`) before
-  gating, and state the artifact's build time + a fingerprint of the fix in the report.
+- **Any gate claiming a capability works MUST exercise THE artifact that ships** — the canonical
+  distributable at its real path (`scripts/lib/artifact.mjs` → `DISTRIBUTABLE`), driven through
+  the MCP tool surface. Not source, not `dist`, not a direct Playwright script, and **not a
+  bundle built the same way into a temp directory**. "Built identically" is not the same file;
+  only the file we hand people is evidence about the file we hand people.
+- Gates default to the distributable and hard-fail when it is missing. A throwaway build is
+  available only behind an explicit `--ephemeral`, which must announce that the run proves the
+  code compiles and does NOT gate the shipped artifact.
+- Every gate report states: artifact path, build time, **sha256**, and a fingerprint of the fix
+  grepped from inside the bundle. The sha in the report must match the sha of the distributable.
+- **This defect class has now recurred four times. Name it when you see it:**
+  1. fixture tests certified *assumptions* rather than observed reality;
+  2. the G1 negative control certified a resolver that had since been *rewritten*;
+  3. Gate A certified *source* that was not in the installed bundle (30h stale);
+  4. the D4 gate certified a *temp bundle* while the distributable and the installed
+     extension both lacked the fix.
+  The shape is always the same: the thing measured is adjacent to, but not identical with, the
+  thing shipped. Before reporting any gate, state explicitly which file was exercised and how
+  you know it is the one users get.

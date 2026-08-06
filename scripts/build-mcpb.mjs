@@ -27,7 +27,9 @@ if (!existsSync(binJs)) {
 }
 const pwVersion = JSON.parse(readFileSync(join(root, "node_modules/playwright/package.json"), "utf8")).version;
 
-const out = process.argv[2] || join(homedir(), "Desktop", "scratchpad", "browser-bridge.mcpb");
+// One definition of the canonical path, shared with every gate (scripts/lib/artifact.mjs).
+const { DISTRIBUTABLE } = await import("./lib/artifact.mjs");
+const out = process.argv[2] || DISTRIBUTABLE;
 mkdirSync(dirname(out), { recursive: true });
 
 const work = mkdtempSync(join(tmpdir(), "bb-mcpb-"));
