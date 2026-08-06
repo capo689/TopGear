@@ -362,3 +362,36 @@ this must be settled before any external release.**
   `server/index.js`. This satisfies the gate-integrity rule (the artifact that ships, through the
   MCP tool surface), is reproducible from a clean checkout, and modifies nothing outside the repo
   (no reinstall into `~/Library/Application Support/Claude/Claude Extensions`).
+
+## Closed as DECISIONS, not bugs (v0.1)
+
+- **Coded selects (display label ≠ committed value) are a documented v0.1 limitation.** The
+  live GitLab phone-country field offers `United States +1` and commits a display of `+1`, so
+  the daemon reports `verification_mismatch{expected:"United States +1", observed:"+1"}`. The
+  value DID commit; the verifier is one-directional (observed ⊇ wanted) on purpose, so a
+  partially-committed value cannot pass. **Do NOT loosen the matcher to buy a green number.**
+  This is the one non-verify in the 10-field live D4 gate and it is counted as a fail.
+- **`widget-patterns.matchesWanted` is bidirectional; `session.ts.verify` is one-directional.**
+  Harmless today because `session.ts` is what reports the result, but a bidirectional matcher
+  anywhere is a latent false-success path if call order ever changes. Recorded, no work attached.
+- **Lever ships selects with no accessible name.** Addressing falls back to `{ref}`, which works.
+  Inferring a name from nearby text is a heuristic with its own failure modes (it is how the
+  "+1" cross-field bleed happened for values), so it is a v0.2 candidate with its own gate, not
+  a quiet patch.
+
+## Gate/telemetry judgment calls (2026-08-05)
+
+- **`scripts/lib/artifact.mjs` owns the canonical distributable path**, imported by
+  `build-mcpb.mjs` and every gate. One definition means a gate cannot drift onto a different
+  file than the builder writes. `--ephemeral` exists for compile-checking only and says so.
+- **`scripts/lib/mcp-client.mjs`** is the shared artifact-driving MCP stdio client. Gates speak
+  JSON-RPC to the BUNDLE's own `server/index.js` rather than importing workspace code, which is
+  what makes them evidence about the shipped file.
+- **D2 measures the goto, not `backend.attach(url)` wholesale.** Tab creation is not page load;
+  including it would inflate page-load and deflate the active-time metric in our favour. The
+  daemon therefore attaches without a URL and navigates itself.
+- **D2 keeps `wallMs ⊇ pageLoadMs` by construction** (wall starts before the attach, page-load
+  is a slice inside it), so `wallMinusPageLoadMs` can never go negative — a real risk once
+  page-load includes the post-navigation re-capture.
+- **D3 `fieldsAttempted` = matched + unmatched.** The honest denominator for "did the form get
+  filled"; matched-only would hide silently skipped fields.

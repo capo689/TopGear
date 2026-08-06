@@ -5,6 +5,142 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## ARTIFACT CHAIN — CLOSED (the fourth divergence, named and fixed)
+
+The D4 gate reported 8/8 and the report was true, but it exercised **a** bundle, not **the**
+bundle: `gate-d4.mjs` built into `mkdtemp`. The distributable on disk (Aug 5 20:37) and the
+installed extension (Aug 5 20:54) both still had `options_not_visible: 0`, `listboxOpen: 0`.
+Nothing on the distribution path had D4.
+
+**Fixed:** `scripts/lib/artifact.mjs` holds ONE definition of the canonical path, used by the
+builder and by every gate. Gates default to the distributable and hard-fail if it is missing; a
+throwaway needs an explicit `--ephemeral` that announces it is not a ship gate. Every gate prints
+path + kind + build time + **sha256** + an in-bundle fingerprint. CLAUDE.md now names all four
+recurrences of this defect class (fixtures certified assumptions → the G1 control certified a
+rewritten resolver → Gate A certified source not in the bundle → D4 certified a temp bundle).
+
+**THE DISTRIBUTABLE**, rebuilt from `e38e742`:
+`~/Desktop/scratchpad/browser-bridge.mcpb`, 4 248 777 bytes,
+sha256 **`c31d0b8256052004e2876cb5ae1f24a6872abc4a7eb8603432a81fc6eb7a87f7`**.
+Markers grepped INSIDE `server/index.js`: `committedValue` 10 (D1), `options_not_visible` 4,
+`listboxOpen` 16, `restoreClosed` 8, `widgetScope` 3 (D4).
+
+| gate | result | artifact sha it loaded |
+|---|---|---|
+| `gate-d4.mjs` (fixture farm) | **8/8** | c31d0b82… |
+| `gate-d4-live.mjs` (live react-select, 10 comboboxes) | **9/10** (the 1 is the coded-select limitation below) | c31d0b82… |
+| `gate-telemetry.mjs` (D2/D3/D5) | **8/8** | c31d0b82… |
+| `gate-trackc.mjs` (Lever + plain HTML5) | **2/2** C3 | c31d0b82… |
+
+Branch merged: `main` is now at the merge commit `f7c9e68` and carries all five previously
+unshipped commits (D1, Gates A+B, three gaps, F1/F2/F3, D4) plus the gate-integrity fix.
+
+---
+
+## D2 / D3 / D5 — the benchmark's measuring instruments (gated through the distributable, 8/8)
+
+| item | was | now | evidence |
+|---|---|---|---|
+| **D2** pageLoadMs | hardcoded `0` in `attach` — wall-minus-page-load did not exist for the call that does the most page loading | the daemon opens the tab WITHOUT navigating, then times the goto + post-navigation re-capture (the same definition `act` uses) | cold nav **pageLoadMs 31 ms**, wallMs 80 ms → active 49 ms. `wallMs ≥ pageLoadMs` asserted, so active time can never go negative. Warm attach (no url) records 0. |
+| **D3** fill_record telemetry | none — a whole run left ONE event (the attach) | records like `act` | attach + fill_record = **2 events**; `fieldsAttempted 3 = matched 2 + unmatched 1`; `fieldsVerified 2 = batch.completed 2` |
+| **D5** silent-off | an `.mcpb` update wipes `user_config`, telemetry died silently | the server states its telemetry condition at startup | ON → path; unset → "OFF … an extension UPDATE clears user_config"; unsubstituted `${user_config…}` → OFF, and no file by that name is created |
+
+`fieldsAttempted` deliberately counts every field the RECORD asked for, matched **and**
+unmatched. Counting only matched fields would let a 33-field record that skipped 13 report a
+flattering 20/20 — the metric-gaming this project treats as a defect.
+
+Tests: `daemon.test.ts` "D2: a cold navigation inside attach records pageLoadMs > 0", "D3:
+attach + fill_record emits TWO events", `eval-telemetry.test.ts` "telemetryStatusMessage (D5)".
+
+---
+
+## TRACK C — two-vendor reality (v0.1 scope), through the distributable
+
+Cut to two vendors on purpose: a second real ATS (Lever) so the widget work is not
+Greenhouse-shaped, and a real plain-HTML5 form so it is not react-select-shaped. **C3
+teach-and-recover** is the gate — the production loop, and the thing D4 broke. Selects only;
+nothing was ever submitted.
+
+| vendor | field | addressed by | widgetKind | teach | options taught | recover |
+|---|---|---|---|---|---:|---|
+| Lever (ATS #2) — live apply form | *(no accessible name)* | **ref** | native-select | option_not_found | 13 | **verified** |
+| Plain HTML5 native — real hosted form | Dropdown (select) | name | native-select | option_not_found | 4 | **verified** |
+
+**C3: 2/2 verified. Zero fields reported the ambiguous `availableOptions: []`.**
+
+**Honest gap found, recorded not hidden:** the live Lever `<select>` ("How did you hear about
+this job?", 13 real options) has **no accessible name** — its label is a sibling `div`, not a
+`<label for>`, and there is no `aria-label`. `target: {role, name}` cannot address it; only
+`{ref}` can. That is a real-vendor addressing gap in the semantic view, not a widget-driving
+failure: once addressed, teach-and-recover verified normally. **Flagged for a decision rather
+than patched** — inferring a name from nearby text is a heuristic that deserves its own gate
+(candidate v0.2).
+
+Deferred to v0.2 as instructed: the four-vendor matrix, Workday, submit-truth loopback, and the
+extension live-load. Not attempted, not claimed.
+
+### WidgetKind claims — DOWNGRADED to what is actually exercised
+
+The M1 line "Every WidgetKind passes its gauntlet" overstated it. Honest state:
+
+| WidgetKind | evidence |
+|---|---|
+| `native-select` | ✅ **live** (Lever, selenium.dev) + fixtures |
+| `react-select` | ✅ **live** (Greenhouse ×2 boards, 9/10 + Discord) + fixture |
+| `radix`, `mui`, `ant` | ⚠️ **fixture only** — driven by the shared playbook against library-signature-shaped fixtures, never against those libraries on a real page |
+| `typeahead`, `custom-combobox` | ⚠️ **fixture only** |
+| `native-date` | ⚠️ **fixture only** (`set_date` in `execution.e2e.test.ts`) |
+| `headlessui`, `downshift`, `custom-datepicker` | ❌ **UNPROVEN — detector branch exists, zero fixtures, zero tests.** Detection is untested and the driving path has never run for them. |
+| `custom`, `unknown` | ❌ classification-only; `unknown` surfaces `widget_unrecognized` by design |
+
+---
+
+## CLEAN-INSTALL FULL SUITE — the actual count
+
+Fresh `git clone` → `pnpm install --frozen-lockfile` → `pnpm build` → `turbo run test --force`
+(**0 cached, 43/43 tasks**), so this is a real clean-install number, not a cache replay:
+
+**268 tests across 23 packages, all passing.**
+
+| package | tests | | package | tests |
+|---|---:|---|---|---:|
+| commons-ingest | 45 | | execution | 22 |
+| policy | 28 | | daemon | 17 |
+| contribution | 24 | | evals | 15 |
+| protocol | 22 | | pattern-runner | 10 |
+| widget-patterns | 9 | | scheduler | 8 |
+| mcp-server | 7 | | site-memory | 7 |
+| audit | 12 | | locators | 6 |
+| semantic-engine | 6 | | cli | 6 |
+| fixture-farm | 5 | | relay | 5 |
+| browser-playwright | 4 | | harvest-store | 3 |
+| secrets | 3 | | browser-extension | 2 |
+| inspector-ui | 2 | | | |
+
+---
+
+## INV-10 — BLOCKED, not passed (durable storage not provisioned)
+
+`GET /api/health` → **200**, body `{"service":"commons-ingest","release":"R1","storage":"unconfigured",…}`.
+Production is UP; quarantine storage is not wired (`BLOB_READ_WRITE_TOKEN` unset), so
+`POST /api/contributions` returns 503 by design rather than silently dropping data.
+
+`scripts/gate-inv10.mjs` is written and waiting. It does NOT accept a status code as proof:
+
+1. mint a FRESH install identity (used once, so anything under it is ours);
+2. build ONE real Class C record (public origin, structure only, no values, no query string,
+   day-granular — asserted, not assumed), sign it, POST it, expect 202;
+3. **readback**: POST a signed purge proof for the same install; the endpoint lists that
+   install's quarantined objects, so `purged === 1` proves the record was durably there;
+4. purge again → `purged === 0`, proving step 3 deleted rather than merely reported;
+5. negative control: a record whose signature does not match its key is rejected 401.
+
+It also leaves the commons clean (the test record is purged, not left in the corpus). Run it
+the moment `storage` stops reading `unconfigured`. **Until then INV-10 is an honest BLOCKED**
+(the script exits 2 for blocked, distinct from a fail).
+
+---
+
 ## D4 — CLOSED. Probe state leak + false empty-option report (both halves fixed, artifact-gated)
 
 **The defect, as measured.** A probe that took the `option_not_found` path left the widget's
