@@ -136,8 +136,9 @@ Production is UP; quarantine storage is not wired (`BLOB_READ_WRITE_TOKEN` unset
 
 **Production verified green after the merge** (standing law): deployment
 `dpl_4RSf1jbGLyfMQqfvdwLfr1P6E59c`, target `production`, state `READY`, commit `7e580e49`
-= the current `main` tip. Polled `/api/health` every 60 s for the length of this session;
-`storage` read `unconfigured` on every sample.
+= the current `main` tip. Polled `/api/health` every 60 s from 12:00:29 to
+12:19:34 local (**20/20 samples `unconfigured`**), plus a confirming check after. Ace's Blob
+provisioning had not landed during this session.
 
 `scripts/gate-inv10.mjs` is written and waiting. It does NOT accept a status code as proof:
 
