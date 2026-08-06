@@ -19,7 +19,7 @@ export interface EvalEvent {
   runIndex: number;
   targetUrl: string;
   sessionId: string;
-  tool: string; // "attach" | "view" | "act"
+  tool: string; // "attach" | "view" | "act" | "fill_record"
   wallMs: number;
   pageLoadMs: number;
   fieldsAttempted: number;
@@ -30,6 +30,25 @@ export interface EvalEvent {
 
 /** Fields the daemon supplies per event; run identity (runIndex/targetUrl) is per-run. */
 export type EvalRecordInput = Omit<EvalEvent, "ts" | "workflow" | "arm">;
+
+/**
+ * D5: a one-line startup statement of whether telemetry is on, and WHY it is off.
+ *
+ * Updating an .mcpb wipes `user_config`, so `eval_log_path` reverts to unset and telemetry
+ * goes off with no signal at all — a whole benchmark evening was lost to that once. The state
+ * is now announced at startup instead of being inferred later from an empty JSONL. Emits the
+ * path only, never contents (INV-4).
+ */
+export function telemetryStatusMessage(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = (env.BB_EVAL_LOG ?? "").trim();
+  if (!raw) {
+    return "browser-bridge: eval telemetry OFF (BB_EVAL_LOG unset). If you set it before, an extension UPDATE clears user_config — re-enter the eval log path in the extension's settings.";
+  }
+  if (raw.includes("${")) {
+    return `browser-bridge: eval telemetry OFF — BB_EVAL_LOG arrived unsubstituted (${raw}). The host did not fill in user_config; set the eval log path in the extension's settings.`;
+  }
+  return `browser-bridge: eval telemetry ON → ${raw}`;
+}
 
 /** Best-effort JSONL sink. Never throws into the run. */
 export class EvalTelemetry {

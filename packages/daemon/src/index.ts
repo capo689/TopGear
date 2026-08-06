@@ -4,3 +4,4 @@
  * All safety policy lives here (INV-5); no model is trusted.
  */
 export * from "./daemon.js";
+export { EvalTelemetry, telemetryStatusMessage, type EvalEvent, type EvalRecordInput } from "./eval-telemetry.js";

@@ -81,6 +81,64 @@ describe("Daemon", () => {
     }
   }, 40_000);
 
+  it("D2: a cold navigation inside attach records pageLoadMs > 0 (and a warm attach records 0)", async () => {
+    // The bug: attach recorded a HARDCODED pageLoadMs of 0, so wall-minus-page-load did not
+    // exist for the call that does the most page loading.
+    const logPath = join(tmpdir(), `bb-eval-${randomUUID()}.jsonl`);
+    process.env.BB_EVAL_LOG = logPath;
+    const backend = await createPlaywrightBackend({ headless: true });
+    const d = new Daemon({ backend, auditSink: new MemorySink() });
+    try {
+      const cold = await d.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+      const warm = await d.attach({ grant: grant() }); // no url → nothing navigated
+      const events = readFileSync(logPath, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { tool: string; sessionId: string; wallMs: number; pageLoadMs: number });
+
+      const coldEv = events.find((e) => e.tool === "attach" && e.sessionId === cold.sessionId)!;
+      expect(coldEv.pageLoadMs).toBeGreaterThan(0);
+      // pageLoadMs is a SUBSET of wallMs, so wall-minus-page-load can never go negative.
+      expect(coldEv.wallMs).toBeGreaterThanOrEqual(coldEv.pageLoadMs);
+
+      const warmEv = events.find((e) => e.tool === "attach" && e.sessionId === warm.sessionId)!;
+      expect(warmEv.pageLoadMs).toBe(0);
+    } finally {
+      delete process.env.BB_EVAL_LOG;
+      await d.shutdown();
+      rmSync(logPath, { force: true });
+    }
+  }, 40_000);
+
+  it("D3: attach + fill_record emits TWO events, with fields populated from the result", async () => {
+    // The bug: a whole benchmark run left ONE event in the log (the attach) because
+    // fill_record — the measured part of every run — emitted nothing at all.
+    const logPath = join(tmpdir(), `bb-eval-${randomUUID()}.jsonl`);
+    process.env.BB_EVAL_LOG = logPath;
+    const backend = await createPlaywrightBackend({ headless: true });
+    const d = new Daemon({ backend, auditSink: new MemorySink() });
+    try {
+      const a = await d.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+      const result = await d.fillRecord(a.sessionId, {
+        record: { Email: "ada@example.com", "First name": "Ada", "No such field on this form": "x" },
+      });
+      const events = readFileSync(logPath, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { tool: string; fieldsAttempted: number; fieldsVerified: number; status: string });
+      expect(events.length).toBe(2);
+      expect(events.map((e) => e.tool)).toEqual(["attach", "fill_record"]);
+
+      const fr = events[1]!;
+      // Attempted counts EVERY field the record asked for — matched AND unmatched — so a
+      // record that silently skipped fields cannot report a flattering denominator.
+      expect(fr.fieldsAttempted).toBe(result.matched.length + result.unmatched.length);
+      expect(fr.fieldsAttempted).toBe(3);
+      expect(result.unmatched.length).toBe(1);
+      expect(fr.fieldsVerified).toBe(result.batch.completed);
+      expect(fr.fieldsVerified).toBeGreaterThan(0);
+      expect(fr.status).toBe(result.batch.status);
+    } finally {
+      delete process.env.BB_EVAL_LOG;
+      await d.shutdown();
+      rmSync(logPath, { force: true });
+    }
+  }, 40_000);
+
   it("views and acts through the session, enforcing the grant", async () => {
     const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
     const view = await daemon.view(sessionId, { kind: "all_forms" });

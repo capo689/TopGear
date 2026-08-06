@@ -3,7 +3,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { EvalTelemetry } from "./eval-telemetry.js";
+import { EvalTelemetry, telemetryStatusMessage } from "./eval-telemetry.js";
 
 describe("EvalTelemetry.fromEnv (installed-bundle control surface)", () => {
   it("is disabled when BB_EVAL_LOG is unset or empty", () => {
@@ -31,5 +31,23 @@ describe("EvalTelemetry.fromEnv (installed-bundle control surface)", () => {
     } finally {
       rmSync(path, { force: true });
     }
+  });
+});
+
+describe("telemetryStatusMessage (D5 — silent-off must be visible)", () => {
+  it("says OFF and names the .mcpb-update cause when BB_EVAL_LOG is unset", () => {
+    const msg = telemetryStatusMessage({});
+    expect(msg).toContain("OFF");
+    expect(msg.toLowerCase()).toContain("update"); // an extension UPDATE clears user_config — the actual cause
+  });
+
+  it("says OFF and shows the raw value when the host left the placeholder unsubstituted", () => {
+    const msg = telemetryStatusMessage({ BB_EVAL_LOG: "${user_config.eval_log_path}" });
+    expect(msg).toContain("OFF");
+    expect(msg).toContain("${user_config.eval_log_path}");
+  });
+
+  it("says ON with the path when telemetry is configured", () => {
+    expect(telemetryStatusMessage({ BB_EVAL_LOG: "/tmp/x.jsonl" })).toBe("browser-bridge: eval telemetry ON → /tmp/x.jsonl");
   });
 });

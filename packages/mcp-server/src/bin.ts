@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { Daemon } from "@browser-bridge/daemon";
+import { Daemon, telemetryStatusMessage } from "@browser-bridge/daemon";
 import { createPlaywrightBackend } from "@browser-bridge/browser-playwright";
 import { startSocketRelay, ExtensionBackend } from "@browser-bridge/browser-extension";
 import type { BrowserBackend } from "@browser-bridge/backend";
@@ -17,6 +17,9 @@ import { createMcpServer } from "./server.js";
  * Harvest (bridge_run_pattern) always uses an isolated Playwright browser.
  */
 async function main(): Promise<void> {
+  // D5: state the telemetry condition once at startup so "silently off after an update" is
+  // visible in the host's log rather than discovered later from an empty JSONL.
+  process.stderr.write(telemetryStatusMessage(process.env) + "\n");
   const harvestBackend = await createPlaywrightBackend({ headless: true, isolated: true });
 
   let backend: BrowserBackend;

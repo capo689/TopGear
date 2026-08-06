@@ -96,7 +96,19 @@ export class Daemon {
   }
 
   async attach(req: AttachRequest): Promise<AttachResult> {
-    const page = await this.opts.backend.attach(req.url);
+    // D2: the cold navigation happens HERE, and it used to be invisible — `attach` recorded a
+    // hardcoded pageLoadMs of 0, so wall-minus-page-load did not exist for the one call that
+    // does the most page loading. Attach the tab WITHOUT navigating, then time the goto
+    // ourselves, so the number means the same thing it means in `act` (plan §4.6: goto +
+    // post-navigation re-capture) and excludes tab-open overhead, which is not page load.
+    const tAttach = performance.now();
+    const page = await this.opts.backend.attach();
+    let navMs = 0;
+    if (req.url !== undefined) {
+      const tNav = performance.now();
+      await page.goto(req.url);
+      navMs += performance.now() - tNav;
+    }
     const sessionId = randomUUID();
     const capabilities = new CapabilityStore(this.clock);
     const secrets = new InMemorySecretBroker();
@@ -122,10 +134,15 @@ export class Daemon {
     // attach call the daemon already has — NOT from a frozen env, which would merge every run.
     const run = { runIndex: this.evalRunSeq++, targetUrl: req.url ?? page.url() };
     this.evalRuns.set(sessionId, run);
-    const t0 = performance.now();
+    const tCapture = performance.now();
     const initialView = await session.view(req.scope ?? { kind: "full" });
+    // The post-navigation re-capture is page-load time by the same definition `act` uses —
+    // but ONLY when we navigated; on a warm attach it is ordinary bridge work.
+    if (req.url !== undefined) navMs += performance.now() - tCapture;
     this.evalSink?.record({
-      ...run, sessionId, tool: "attach", wallMs: Math.round(performance.now() - t0), pageLoadMs: 0,
+      // wallMs spans the WHOLE attach call, so pageLoadMs is always a subset of it and
+      // wall-minus-page-load can never go negative.
+      ...run, sessionId, tool: "attach", wallMs: Math.round(performance.now() - tAttach), pageLoadMs: Math.round(navMs),
       fieldsAttempted: 0, fieldsVerified: 0, interrupted: false, status: "attached",
     });
     return { sessionId, capabilities: this.capabilitiesHandshake(), initialView };
@@ -176,8 +193,26 @@ export class Daemon {
     }
   }
 
-  fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult> {
-    return this.get(sessionId).session.fillRecord(req);
+  /**
+   * D3: `fill_record` is the MEASURED part of every benchmark run, and it emitted nothing —
+   * a full run left exactly one event in the log (the attach). It now records like `act`.
+   *
+   * `fieldsAttempted` counts every field the RECORD asked for (matched + unmatched), not just
+   * the ones that found a home. Counting only matched fields would report 20/20 for a 33-field
+   * record that silently skipped 13 — a flattering denominator, which is the metric-gaming this
+   * project treats as a defect.
+   */
+  async fillRecord(sessionId: string, req: FillRecordRequest): Promise<FillRecordResult> {
+    const t0 = performance.now();
+    const result = await this.get(sessionId).session.fillRecord(req);
+    this.evalSink?.record({
+      ...this.evalRun(sessionId), sessionId, tool: "fill_record",
+      wallMs: Math.round(performance.now() - t0), pageLoadMs: result.batch.pageLoadMs ?? 0,
+      fieldsAttempted: result.matched.length + result.unmatched.length,
+      fieldsVerified: result.batch.completed,
+      interrupted: result.batch.status === "interrupted", status: result.batch.status,
+    });
+    return result;
   }
 
   screenshot(sessionId: string, roi: ScreenshotRoi): Promise<ScreenshotResult> {
