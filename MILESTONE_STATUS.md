@@ -134,6 +134,11 @@ Fresh `git clone` → `pnpm install --frozen-lockfile` → `pnpm build` → `tur
 Production is UP; quarantine storage is not wired (`BLOB_READ_WRITE_TOKEN` unset), so
 `POST /api/contributions` returns 503 by design rather than silently dropping data.
 
+**Production verified green after the merge** (standing law): deployment
+`dpl_4RSf1jbGLyfMQqfvdwLfr1P6E59c`, target `production`, state `READY`, commit `7e580e49`
+= the current `main` tip. Polled `/api/health` every 60 s for the length of this session;
+`storage` read `unconfigured` on every sample.
+
 `scripts/gate-inv10.mjs` is written and waiting. It does NOT accept a status code as proof:
 
 1. mint a FRESH install identity (used once, so anything under it is ours);
