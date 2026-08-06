@@ -25,6 +25,7 @@ import { InMemoryHarvestStore, type HarvestRecord } from "@browser-bridge/harves
 import { PatternRunner, CrawlPolicy } from "@browser-bridge/pattern-runner";
 import { InMemorySiteMemory } from "@browser-bridge/site-memory";
 import type { BrowserBackend, BrowserPage, ScreenshotRoi, ScreenshotResult } from "@browser-bridge/backend";
+import { EvalTelemetry } from "./eval-telemetry.js";
 
 interface SessionEntry {
   session: Session;
@@ -80,6 +81,9 @@ export class Daemon {
   private readonly harvestStore = new InMemoryHarvestStore();
   private readonly siteMemory = new InMemorySiteMemory();
   private readonly scheduler: Scheduler;
+  private readonly evalSink = EvalTelemetry.fromEnv(); // live-tier recorder; off unless BB_EVAL_LOG set
+  private evalRunSeq = 0; // each attach starts a new run; per-session run identity below
+  private readonly evalRuns = new Map<string, { runIndex: number; targetUrl: string }>();
 
   constructor(private readonly opts: DaemonOptions) {
     this.clock = opts.clock ?? systemClock;
@@ -114,8 +118,22 @@ export class Daemon {
       },
     });
     this.sessions.set(sessionId, { session, page, capabilities, secrets, grant: req.grant });
+    // Each attach STARTS A NEW RUN (a fresh runIndex, in-process). targetUrl comes from the
+    // attach call the daemon already has — NOT from a frozen env, which would merge every run.
+    const run = { runIndex: this.evalRunSeq++, targetUrl: req.url ?? page.url() };
+    this.evalRuns.set(sessionId, run);
+    const t0 = performance.now();
     const initialView = await session.view(req.scope ?? { kind: "full" });
+    this.evalSink?.record({
+      ...run, sessionId, tool: "attach", wallMs: Math.round(performance.now() - t0), pageLoadMs: 0,
+      fieldsAttempted: 0, fieldsVerified: 0, interrupted: false, status: "attached",
+    });
     return { sessionId, capabilities: this.capabilitiesHandshake(), initialView };
+  }
+
+  /** The run identity (runIndex + targetUrl) for a session, so every event on it groups correctly. */
+  private evalRun(sessionId: string): { runIndex: number; targetUrl: string } {
+    return this.evalRuns.get(sessionId) ?? { runIndex: 0, targetUrl: "" };
   }
 
   private get(sessionId: string): SessionEntry {
@@ -124,13 +142,26 @@ export class Daemon {
     return entry;
   }
 
-  view(sessionId: string, scope: ViewScope): Promise<SemanticView> {
-    return this.get(sessionId).session.view(scope);
+  async view(sessionId: string, scope: ViewScope): Promise<SemanticView> {
+    const t0 = performance.now();
+    const view = await this.get(sessionId).session.view(scope);
+    this.evalSink?.record({
+      ...this.evalRun(sessionId), sessionId, tool: "view", wallMs: Math.round(performance.now() - t0), pageLoadMs: 0,
+      fieldsAttempted: 0, fieldsVerified: 0, interrupted: false, status: "viewed",
+    });
+    return view;
   }
 
   async act(sessionId: string, batch: ActionBatch): Promise<BatchResult> {
     try {
-      return await this.get(sessionId).session.act(batch);
+      const t0 = performance.now();
+      const result = await this.get(sessionId).session.act(batch);
+      this.evalSink?.record({
+        ...this.evalRun(sessionId), sessionId, tool: "act", wallMs: Math.round(performance.now() - t0), pageLoadMs: result.pageLoadMs ?? 0,
+        fieldsAttempted: result.results.length, fieldsVerified: result.completed,
+        interrupted: result.status === "interrupted", status: result.status,
+      });
+      return result;
     } catch (err) {
       if (err instanceof BatchCapError) {
         // Surface cap violations as a rejected result with the teaching message.

@@ -6,3 +6,4 @@ export * from "./metrics.js";
 export * from "./workflows.js";
 export * from "./agent.js";
 export * from "./harness.js";
+export * from "./live-recorder.js";

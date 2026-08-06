@@ -5,6 +5,345 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
+## D4 — CLOSED. Probe state leak + false empty-option report (both halves fixed, artifact-gated)
+
+**The defect, as measured.** A probe that took the `option_not_found` path left the widget's
+listbox OPEN. The next action on the SAME widget clicked the trigger, which TOGGLED that listbox
+shut, and the runtime then reported `option_not_found, availableOptions: []` — indistinguishable
+from a field that genuinely has no options. Two defects: **(a)** the state leak, **(b)** the runtime
+asserting "there is nothing there" when the truth was "I could not look".
+
+**Reproduced first, in the fixture farm, against the PRE-FIX playbook** (not asserted — run):
+
+```
+TEACH:   {"ok":false,"reason":"option_not_found","availableOptions":["React","Vue","Svelte","Solid"]}
+RECOVER: {"ok":false,"reason":"option_not_found","availableOptions":[]}      ← the exact live lie
+```
+
+The same two calls against the fixed playbook return `RECOVER: {"ok":true}`.
+
+**The fix.**
+- (a) `restoreClosed` (`packages/widget-patterns/src/index.ts`) puts the widget back in a
+  VERIFIED-closed state on every exit path of `applySelect`/`applySearchPick` — Escape first, then
+  a trigger activation for widgets that ignore Escape, each confirmed by read-back. `openListbox`
+  is idempotent: it reads state first and does not click a widget that is already open. One
+  recovery pass reopens and re-polls when the listbox reads not-open, so poisoning arriving from
+  OUTSIDE the call is absorbed rather than reported.
+- (b) New typed failure `options_not_visible` (`packages/protocol/src/result.ts`) carrying
+  `widgetState: "closed" | "unknown"`. `availableOptions: []` is now emitted ONLY when the listbox
+  is demonstrably open. The observation backing it is `ElementStateResult.listboxOpen`, which is
+  THREE-state (`true` / `false` / absent) precisely so "I could not look" cannot collapse into
+  "there is nothing there". Options seen while THIS widget reads closed belong to another open
+  listbox and are never reported as this field's options.
+
+**GATE — PASS 8/8, through the SHIPPING ARTIFACT** (`scripts/gate-d4.mjs`: unpacks the `.mcpb`,
+spawns its own `server/index.js`, drives the 8-tool MCP surface over stdio).
+Artifact sha256 `b07ea0041928e6055cb2e202f099e307223acfd4f4fe9b09db5416574f4d8406`, built
+2026-08-06T04:15:34Z, fingerprint inside the bundle `{options_not_visible:true, listboxOpen:true}`.
+
+| check | evidence |
+|---|---|
+| MCP surface is the 8 tools | bridge_act, attach, confirm, fill_record, harvest, run_pattern, screenshot, view |
+| teach returns the real list | `{"reason":"option_not_found","availableOptions":["React","Vue","Svelte","Solid"]}` |
+| **recover on the VERY NEXT call, same widget, nothing in between** | `{"target":"Framework","status":"verified"}` |
+| teach → recover on a widget that ignores Escape | `option_not_found` → `{"target":"Plan","status":"verified"}` |
+| **negative control:** OPEN listbox, genuinely no options | `{"reason":"option_not_found","availableOptions":[]}` |
+| **cannot look** | `{"reason":"options_not_visible","widgetState":"closed","detail":"the listbox is closed, so this widget's options could not be read; reopen it and retry"}` |
+| the two are distinguishable by reason alone | `option_not_found` vs `options_not_visible` |
+| no regression on the other library widgets | Region, Tier, Async city, Rerender color all verified |
+
+**LIVE confirmation — 9/10, same artifact** (`scripts/gate-d4-live.mjs`, live react-select on
+`job-boards.greenhouse.io/gitlab/jobs/8620720002`, 10 real comboboxes, selects only, never
+submitted). Every field taught its real options and then verified on the immediately following
+call, including the exact EEOC block D4 was found on (Gender, Hispanic/Latino, Veteran Status,
+Disability Status). **Zero fields reported the ambiguous `availableOptions: []`.**
+
+The 1 non-verify is NOT D4 and is honest fail-closed: the phone-country widget commits a display
+of `+1` for the option labelled `United States +1`, so the daemon's verifier returns
+`{"reason":"verification_mismatch","expected":"United States +1","observed":"+1"}`. The value DID
+commit; the daemon's `verify()` matcher is deliberately one-directional (observed ⊇ wanted) so a
+partially-committed value cannot pass. **Open item (not D4):** `widget-patterns.matchesWanted` is
+BIDIRECTIONAL while `session.ts.verify` is one-directional — two verifiers with different rules,
+and this field is where they disagree. Flagged, deliberately not "fixed" by loosening the guardrail.
+
+**Tests.** `packages/widget-patterns/src/gauntlet.test.ts` gains 5 D4 cases (all run against real
+Chromium + the fixture farm, no mocks). New fixture widgets in
+`apps/fixture-farm/public/widgets/library-widgets.html`: `Empty roster` (opens, genuinely zero
+options), `Stuck menu` (never opens for a click → unreadable), `Portal fruit` (no ARIA open/closed
+signal at all → `unknown`), plus an Escape-ignoring variant. Full suite: 43/43 Turbo tasks green.
+
+**D5 (from the same report) — not addressed here.** Updating an `.mcpb` silently wipes
+`user_config` (eval_log_path, headless), so telemetry goes off without warning. Still open.
+
+---
+
+## WAVE "PROVE THE CORE ON REALITY" — results (Gate B PASS; Gate A 13/14 via artifact; C/D2/D3 open)
+
+> ⚠ **RETRACTION — the "GATE A — PASS, 15/15" section below is SUPERSEDED and INVALID.** It was
+> measured by driving source/dist with direct Playwright scripts, NOT the shipping `.mcpb`. The
+> installed artifact predated the fix by 30h and did not contain it (F1). The authoritative Gate A
+> result is the artifact-path run: **13/14, NOT a pass** — see "F1/F2/F3" below. The 15/15 table is
+> kept only as the record of what a source-path gate wrongly certified.
+
+**§0 precision item — ANSWERED.** `readElementState`'s branches are `if/else if` on `tag`, and
+`role === "combobox"` is only the FINAL `else if`. Greenhouse's widget is `<input role="combobox">`,
+so **`tag === "input"` fires first** and returns the cleared search input's `.value`; the
+`role=combobox` branch NEVER executes for it. (My first report said "aria-selected text of the
+listbox" — that was wrong; the second report was right. The fix landed on the branch that runs.)
+
+**GATE A — [RETRACTED, see above] 15/15 via the SOURCE path** on the live Discord form (per-field table in the D1 section below).
+**GATE B — PASS, 5/5** live harvest (first ever live run of the scrape leg; table below).
+**Still open:** Track C harness, submit-truth on a controlled form, D2 (pageLoadMs), D3
+(fill_record telemetry), full-suite clean-install count. Not aggregated into a pass.
+
+### GATE A — form leg, per field — ⚠ SUPERSEDED (source path, not the shipping artifact)
+
+| field | intended | committed value read | signal | verified |
+|---|---|---|---|---|
+| country | United States +1 | +1 | display | YES |
+| candidate-location | Ankara, Ankara Province, Turkey | Ankara, Ankara Province, Turkey | display | YES |
+| school--0 | Aalborg University | Aalborg University | display | YES |
+| degree--0 | Associate's Degree | Associate's Degree | display | YES |
+| discipline--0 | Accounting | Accounting | display | YES |
+| question_35445162002 (work auth) | Yes | Yes | display | YES |
+| question_35445163002 (in US) | Yes | Yes | display | YES |
+| question_35445164002 (relocate) | Yes | Yes | display | YES |
+| 4033064002 Gender | Male | Male | display | YES |
+| 4033065002 Race/Ethnicity | American Indian or Alaska Native | American Indian or Alaska Native | display | YES |
+| 4033066002 Veteran | I am not a protected veteran | I am not a protected veteran | display | YES |
+| 4033067002 Disability | Yes, I have a disability, or have had one in the past | (same) | display | YES |
+| 4033068002 Gender Identity | Man | Man | display | YES |
+| 4033069002 Race (optional) | Black or of African descent | Black or of African descent | display | YES |
+| 4033070002 LGBTQ+ | Yes | Yes | display | YES |
+
+**15/15.** Every field also read `committedValue = (none)` BEFORE its pick (fail-closed intact per
+field) and `invalid = false` after (the false-flagging is gone). All 15 resolved via the `display`
+signal — ⚠ (RETRACTED by F3: Greenhouse DOES have 9 anonymous required carriers) the carrier branch is exercised by Workday/Lever
+in Track C. Guardrails, each live-verified:
+- **G1 value-matching, NOT presence-checking:** negative control on GitLab — committing "United
+  Kingdom" while intending "United States of America" **FAILS** verification. Confirmed.
+- **G2 fail closed:** pre-commit reads resolve nothing → `committedValue` absent → verification
+  fails. Also removed `applySearchPick`'s "we clicked something with a name ⇒ ok" fallback.
+- **G3 verifier cannot certify itself:** cross-checked against react-select's OWN aria-live
+  announcement `"option United States of America, selected."` — emitted by the widget, not read
+  off the element under test.
+
+### Negative controls re-run against SHIPPED code (6d5f5f3) — the earlier G1 predated 3 rewrites
+
+The first G1 control ran before `resolveCommitted`'s scope was rewritten three times, so it did
+not certify the shipped resolver. Re-run against the shipped build:
+
+| control | result |
+|---|---|
+| **(a) wrong value** — commit "Yes", verify against "No" | **FAIL ✅** (correct — no false success). Sanity: verify vs actual "Yes" → PASS |
+| **(b) cross-field leak** — commit "Male" in Gender, verify UNTOUCHED Race against "Male" | untouched Race `committedValue = undefined` → verify **FAIL ✅** (no leak). This is the exact failure mode the "+1" bleed proved live, now controlled against |
+| **(c) `invalid` false-negative** — does an EMPTY required field still report invalid? | **YES ✅** — empty required `firstName` and `agreeTerms` both `invalid=true`; filling `firstName` clears it to false. No false negative introduced by the false-positive fix |
+
+**Honest caveat on (c) — ⚠ RETRACTED, see F2 below (Greenhouse is MIXED: nat 9 / aria 14).** The original claim was: the control is **inconclusive on Greenhouse** — its required fields are
+`aria-required` only, so native `checkValidity()` returns `true` even when empty and the page never
+reported them invalid at all. The meaningful control had to run where native validity actually
+fires (real `required` attributes). Recorded rather than glossed: on aria-required-only forms the
+`invalid` signal carries no information either before or after this change.
+
+**Clean-install full suite after the verifier change: 258 tests / 43 tasks green, build 25/25**
+(unchanged from the pre-change count — no regression in the shared read paths).
+
+**Two false starts worth recording (scope is the whole game):** a fixed-depth ancestor walk and a
+class-name heuristic BOTH escaped the field and read a NEIGHBOURING widget's value (every field
+returned the phone widget's "+1"). The fix is a measured invariant: climb while the ancestor holds
+EXACTLY ONE combobox, stop at the shared group. A third failure was in the HARNESS, not the
+product — reusing one `data-bb-ref` across fields made `querySelector` always return the first match.
+
+### GATE B — scrape leg, first live run (5 real GitLab postings)
+
+`bridge_run_pattern` → `{requested:5, harvested:5, deduped:0, skipped:[], exceptions:[]}`.
+
+| measure | result |
+|---|---|
+| pages harvested | **5/5**, zero exceptions |
+| turns | **3** (attach → run_pattern → harvest) |
+| wall clock (harvest) | ~440 ms for 5 pages ≈ **11 pages/sec** |
+| corpus queryable | YES — `list` returns 5 distinct real titles; `search "DevSecOps"` returns full records |
+| fidelity | **faithful, no truncation** — full descriptions end-to-end (overview → what you'll do → what you'll bring → about the team → benefits → EEO → full disability list → closing PUBLIC BURDEN STATEMENT) |
+| INV-6 | content stayed local (harvest store), nothing contributed |
+
+No reality gap found in the scrape leg on this vendor. Generalization to a 2nd content site is
+Track C's C2 and is NOT claimed here.
+
+## F1/F2/F3 — the fix was NOT in the shipping artifact (Fable, blocking)
+
+**F1 CONFIRMED, and it is the same meta-defect a third time.** The installed `.mcpb` predated the
+D1 fix by 30h: `committedValue` occurrences — installed bundle **0**, source **6**. My Gate A drove
+source/dist via direct Playwright scripts, so it never executed the artifact users install.
+
+**Rebuilt via the tracked script** (`pnpm build:mcpb`) → bundle now contains the resolver (8
+occurrences). Re-running Gate A **through the product path** (the bundle's own `server/index.js`
+driven over MCP with `bridge_attach`/`bridge_view`/`bridge_act`) then exposed a SECOND, real gap
+the script-based gate had hidden:
+
+> **The D1 fix was incomplete.** It landed in the ladder's `verifyContains` + the extractor, but
+> **`session.ts`'s outer select verify — the code that produces the reported result — never
+> consulted `committedValue`** (it read only `value` / `selectedLabel`). The product path goes
+> through session.ts; my script path did not. Fixed: session.ts now uses the same precedence
+> (`committedValue` → `selectedLabel` → `value`), still **value-matching** (G1), still
+> **mismatch when nothing resolves** (G2). The reverse containment direction
+> (`wanted.includes(observed)`) is deliberately NOT accepted, so a partial commit can never pass.
+
+### GATE A — re-run through the SHIPPING ARTIFACT: 13/14 (NOT a pass)
+
+| field | intended | result |
+|---|---|---|
+| School / Degree / Discipline | Aalborg University / Associate's Degree / Accounting | ✅ verified |
+| 3 × work-authorization questions | Yes | ✅ verified |
+| Gender* / Race and Ethnicity* / Veteran Status* / Disability Status* | Male / American Indian or Alaska Native / I am not a protected veteran / No, I do not have a disability… | ✅ verified |
+| Gender Identity / Race or Ethnicity / LGBTQIA+ (optional) | Man / Black or of African descent / Yes | ✅ verified |
+| **Country\*** | "United States" → then its real option "United States +1" | ❌ **failed**, `observed: "+1"` |
+| Location (City)* | — | ➖ free-text, not a combobox |
+
+**The one failure, honestly:** `Country*` is the **phone dial-code** react-select. Its real option
+label is "United States +1" but it commits the **transformed** value `+1`. Verification correctly
+refuses it: accepting `+1` for "United States +1" would require the `wanted.includes(observed)`
+direction that lets partial commits pass — reintroducing false-success to buy a green number. **Not
+done.** This widget class (display label ≠ committed value) needs a per-widget transform rule and
+is carried as an OPEN item, not aggregated away.
+
+### F2 — invalid negative control, re-run ON GREENHOUSE (my earlier caveat was WRONG)
+
+Census matches Fable exactly: **`{nat: 9, aria: 14, inv: 9, total: 36}`** — Greenhouse is **mixed**,
+not aria-only. My previous claim was measured on the wrong surface and is retracted.
+
+Re-run on the real risk surface: an **empty required carrier paired with an uncommitted
+react-select** → product reports **`invalid = true` ✅ still fires**. No false negative introduced.
+
+### F3 — Greenhouse DOES have carriers (truth-signal precedence refined)
+
+The 9 natively-required fields are anonymous `INPUT/text` with class `remix-css-…-required`, one
+paired with each required combobox:
+
+| carrier | paired field |
+|---|---|
+| [0]–[4] | Country*, Location (City)*, and the 3 work-authorization questions |
+| [5]–[8] | Gender*, Race and Ethnicity*, Veteran Status*, Disability Status* |
+
+Measured behaviour: the carrier is react-select's HTML5-validation proxy — **present-and-empty
+while uncommitted** (so `invalid` fires correctly), and on commit the required-carrier count goes
+**9 → 8** (Fable's observation reproduced). So precedence #1 (carrier) is what makes the *invalid*
+signal correct, and the rendered display is what makes the *committed value* readable after commit.
+Both are live, and neither can manufacture false success.
+
+**Standing rule added (CLAUDE.md):** any gate claiming a capability works must exercise the artifact
+that ships. Three instances of this meta-defect are now on record: fixtures certified our
+assumptions; the G1 control certified a resolver since rewritten; Gate A certified source not in the
+bundle.
+
+Full suite after the session.ts fix: **258 tests / 43 tasks green**, build 25/25.
+
+---
+
+## D1 DIAGNOSIS — combobox actuation (live, before any fix) → WORLD B (verifying blind)
+
+Measured against TWO real Greenhouse forms (GitLab `question_…` country-of-residence, and the
+ORIGINAL Discord form), replaying the exact ladder with Playwright trusted clicks. Not inferred.
+
+**The 4 data points (GitLab, Country-of-residence = the D1 "United States" failure):**
+1. **Event sequence dispatched:** `page.click(trigger)` (trusted open) → poll `role=option` (visible) →
+   `page.click(option)` (trusted). Both Playwright `.click()` = real mousedown→mouseup→click.
+2. **Visible combobox value after the pick:** the react-select `.select__single-value` renders
+   **"United States of America"**, and the aria-live region announces **"option … selected."** —
+   the selection COMMITTED.
+3. **Paired value carrier after the pick:** there is **NO hidden input** (`input[type=hidden]` = 0),
+   and a **document-wide** diff of all 23 inputs shows **zero changed**. react-select holds the value
+   in React state (rendered as `.select__single-value`); Greenhouse's Remix form serializes that
+   state on submit. The react-select **search `<input>` is cleared to `""`** after selection.
+4. **What the verifier read:** `verifyContains` → `readState(trigger).value`. For `<input role=combobox
+   type=text>`, `readElementState` takes the `tag==="input"` branch and returns the input's `.value`
+   — i.e. the **cleared search input = `""`** → `"" .includes("United States")` = false → the ladder
+   returns `"combobox value did not update after selection"`. **A false failure on a committed value.**
+
+**Confirmed on the original Discord form:** react-select, `singleValueText:"Yes"` (committed),
+`comboInputValue:""`, `hiddenInputs:0` — identical.
+
+**Verdict: WORLD B.** The actuation WORKS (react-select commits; single-value + aria announce it).
+The verifier reads the wrong element (the cleared search input). The `invalidFields` "stayed invalid"
+is the SAME root cause: the required search input is empty → `checkValidity()` false, though the value
+is committed in state.
+
+**Nuance that changes the WORLD-B fix:** the user's model was "read the hidden carrier." There is NO
+hidden DOM carrier on these forms — the submitted value is React state, whose faithful DOM proxy is
+`.select__single-value` (react-select renders it ONLY when a value is committed, so reading it cannot
+manufacture false success). **Proposed fix:** the combobox verifier reads the COMMITTED selection —
+prefer a named hidden carrier's value if one exists, else the rendered selected-value display
+(react-select single-value / equivalent), NEVER the cleared search input; and fix the `invalid`
+signal the same way so committed react-select fields stop false-flagging. Preserve the moat: never
+report a value that isn't actually committed. (5 of the 12 original "failures" were the product
+WORKING — wrong values returning real option lists — and are NOT touched.)
+
+Residual honesty: I did NOT submit the form (mandate), so "committed in state ⇒ submitted" rests on
+react-select's canonical committed markers (single-value render + aria-live "selected"), not a
+server round-trip.
+
+---
+
+## PRE-REGISTERED PREDICTION — 33-field all-custom-combobox form (committed before the benchmark)
+
+Written before any data exists (a prediction written afterwards is worthless). Target: one
+form, 33 fields, EVERY field a CUSTOM combobox (div/ARIA widget), ZERO native `<select>`.
+
+**Turns (bridge arm): I predict 3** — `attach` (turn 1, returns `initialView`) + TWO `act`
+batches. The binding constraint is the protocol cap of **≤ 30 actions/batch** (CLAUDE.md):
+33 combobox selects + 1 submit = 34 actions > 30, so it cannot be one batch; the model must
+split (~30 + ~4). Embedded waits for each listbox are in-daemon (INV-1), NOT extra turns.
+`bridge_fill_record` does NOT collapse this to fewer turns — it builds one `act` of 33
+actions, which trips `BatchCapError` (>30), so it is not a 1-shot here either.
+- Falsifier ↓: **2 turns** ⇒ the 30-action cap isn't binding as I think (or fill_record
+  chunks internally, which it currently does not) — that gap is the finding.
+- Falsifier ↑: **4+ turns** ⇒ a combobox interaction is NOT collapsing into one daemon-side
+  action (open/pick/verify leaking into model turns), or verification failures forced retries.
+
+**WidgetKind fast paths:**
+- **Native-select proven-setter fast path: 0 hits.** It applies only to real `<select>`;
+  there are none, so every field falls through it.
+- **All 33 use the shared ARIA combobox playbook** (user-action emulation: click-open → wait
+  for listbox → click matching option → verify `aria-selected`/`selectedLabel`) — the earned
+  path for recognized libraries (react-select / Radix / MUI / Ant / headlessui / downshift).
+- **Any UNRECOGNIZED custom combobox** (no library signature) falls further down the ladder
+  (CDP trusted input / type-and-pick) and is the single most likely accuracy-loss point.
+
+**Accuracy: I predict 33/33 verified IF every widget matches a known library signature;**
+each unrecognized widget is a likely miss. Wall-clock is measured, not predicted (dominated
+by 33 open/pick interactions at machine speed + page load).
+
+### Benchmark prep (for Fable's live run)
+
+- **The real `browser-bridge.mcpb` is built** (isolated Playwright mode; esbuild bundle +
+  bundled Playwright 1.62.1; needs Chromium in the Playwright cache). Verified live over MCP
+  stdio: exactly the **8 tools** (bridge_attach/view/act/fill_record/run_pattern/harvest/
+  screenshot/confirm — plan §11, no ninth), and a real `bridge_attach` drove Chromium and
+  returned an `initialView`. This is the channel Ace installs so ONE model drives both arms.
+- **Live-tier recorder is real, not a chat window.** The daemon (only in-process component
+  during a live run) now reports `pageLoadMs` per batch (navigation-settle time — it is the
+  only thing that knows when the page settled) and, when `BB_EVAL_LOG` is set, writes one
+  structured JSONL event per attach/view/act with: workflow, arm, runIndex, targetUrl, tool,
+  wallMs, pageLoadMs, fieldsAttempted, fieldsVerified, interrupted, status, ts (run metadata
+  from `BB_EVAL_RUN`). `packages/evals/live-recorder` aggregates events → per-run records
+  (all required fields incl. wall-minus-page-load and gates) and `live-summarize` emits the
+  reproducible comparison table. Proven END-TO-END: ran the packed `.mcpb` with `BB_EVAL_LOG`
+  set, drove attach+act, and the summarizer produced the table from the emitted events.
+- **Extension live-load** (`EXTENSION_LIVELOAD.md`): exact steps + a record-only template for
+  Ace's first pass in real signed-in Chrome — the last genuine unknown; record what breaks,
+  fix nothing on pass one.
+- **Telemetry is reachable from the INSTALLED bundle.** The manifest hardcoded `env` and had
+  no `user_config`, so `BB_EVAL_LOG` could never be set on an installed `.mcpb` — the recorder
+  would silently record nothing. Fixed: a `user_config` block (`eval_log_path` string, optional;
+  `headless` boolean, default true) wired into `mcp_config.env` via the spec's `${user_config.KEY}`
+  substitution (verified against the MCPB MANIFEST spec — env substitution is documented; the
+  `.mcpb` `mcpb validate` passes). Server hardened for the two things the spec does NOT document:
+  a boolean rendered into an env string (tolerant `^(false|0|no|off)$` check) and an unset
+  optional string left as a literal placeholder (`fromEnv` treats a value containing `${` as
+  disabled — never writes to that path). PROVEN on the packed bundle: install-style run with
+  `eval_log_path` set → JSONL written; unsubstituted placeholder → no file; `headless:false` →
+  headed launch (visible window is Ace's display).
+
 ## M0 — Foundations, baseline, and security skeleton — COMPLETE (pending external review)
 
 **Release target:** none (M0 gates M1). **Built on:** 2026-08-01.

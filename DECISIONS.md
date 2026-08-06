@@ -330,3 +330,35 @@ cleanup deleting the specific known-vulnerable deployments so they don't linger 
 workflow, so per instruction it is PROPOSED, not applied. Deleting deployments has no MCP tool
 and needs Ace's authenticated Vercel CLI/dashboard. Both are handed to Ace below. **R1 gate:
 this must be settled before any external release.**
+
+## D4 — judgment calls (2026-08-05)
+
+- **`listboxOpen` is three-state, not boolean.** `ElementStateResult.listboxOpen` is `true`,
+  `false`, or ABSENT. A two-state field would force the runtime to invent a state for widgets
+  that expose no open/closed signal, which is the exact class of lie D4 is about. Absent →
+  the failure reports `widgetState: "unknown"`.
+- **New failure reason rather than a flag on `option_not_found`.** `options_not_visible` is a
+  separate `FailureDetail` member so an agent branches on `reason` alone (INV-8: flat, simple,
+  teaching). A boolean like `couldRead: false` hanging off `option_not_found` would be silently
+  ignorable by any agent that only reads `reason`, which is how the original lie was consumed.
+- **Close strategy: Escape, then a trigger activation, each verified by read-back.** Escape is
+  honoured by every mainstream combobox and cannot commit a value; the click fallback covers
+  widgets that ignore it (the Ant-style fixture). Never assume the keypress worked.
+- **One recovery pass in `applySelect`.** If the poll finds nothing and the widget does not read
+  open, the playbook reopens once and re-polls. This absorbs poisoning that arrived from OUTSIDE
+  the call. Exactly one pass, so a genuinely stuck widget cannot ping-pong.
+- **Options seen while THIS widget reads closed are not reported as its options.** They belong to
+  some other open listbox. Reporting a neighbour's options would be a new lie in place of the old.
+- **`widgetScope` extracted, shared by `resolveCommitted` and `resolveListboxOpen`.** Same
+  single-combobox climb, so the open/closed read can never escape into a neighbouring widget for
+  the same reason the committed-value read cannot.
+- **Verifier asymmetry flagged, NOT fixed.** `widget-patterns.matchesWanted` is bidirectional;
+  `session.ts.verify` is one-directional on purpose (a partially-committed value must not pass).
+  The live GitLab phone-country field (`United States +1` commits a `+1` display) is where they
+  disagree. Loosening the daemon's matcher would weaken a deliberate guardrail to make a number
+  look better, so it is recorded as an open item instead.
+- **Gates drive the artifact over stdio, not the installed extension.** `scripts/gate-d4.mjs` and
+  `scripts/gate-d4-live.mjs` unpack the built `.mcpb` and speak MCP JSON-RPC to its own
+  `server/index.js`. This satisfies the gate-integrity rule (the artifact that ships, through the
+  MCP tool surface), is reproducible from a clean checkout, and modifies nothing outside the repo
+  (no reinstall into `~/Library/Application Support/Claude/Claude Extensions`).

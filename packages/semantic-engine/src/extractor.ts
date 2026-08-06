@@ -20,10 +20,120 @@ export function readElementState(ref: string): ElementStateResult {
   let value: string | undefined;
   let selectedLabel: string | undefined;
   let checked: boolean | undefined;
+  let committedValue: string | undefined;
+  let committedSignal: ElementStateResult["committedSignal"];
+  let listboxOpen: boolean | undefined;
+  let listboxSignal: ElementStateResult["listboxSignal"];
+
+  function nodeVisible(n: Element): boolean {
+    const st = getComputedStyle(n);
+    return (
+      !(n as HTMLElement).hidden &&
+      st.display !== "none" &&
+      st.visibility !== "hidden" &&
+      (n as HTMLElement).getClientRects().length > 0
+    );
+  }
+
+  /**
+   * The widget container for `node`: climb while the ancestor still contains EXACTLY ONE
+   * combobox. The moment it contains more, we have left this widget and entered a shared
+   * group — so one combobox can never read another's value or listbox. (Measured on the
+   * live Discord form, where a class-name heuristic and a fixed-depth walk both escaped
+   * the field and read a NEIGHBOURING widget.)
+   */
+  function widgetScope(node: Element): Element | null {
+    let scope: Element | null = null;
+    let box: Element = node;
+    for (let i = 0; i < 10 && box.parentElement; i++) {
+      const parent: Element = box.parentElement;
+      const combos = parent.querySelectorAll('[role="combobox"], select').length;
+      if (combos > 1) break; // shared group → stop BEFORE it
+      scope = parent;
+      box = parent;
+    }
+    return scope;
+  }
+
+  /**
+   * D4(b), live-measured on Greenhouse: resolve whether this combobox's listbox is OPEN.
+   * The runtime must be able to distinguish "the listbox is open and holds no options"
+   * from "the listbox is closed so I could not read any options" — reporting the second
+   * as the first is the runtime lying. Returns undefined when NEITHER can be established,
+   * so the caller reports `unknown` rather than inventing a state.
+   *
+   * Precedence: what we can SEE beats what the widget claims.
+   *   1. the owned listbox is on screen WITH options → open (we can literally see them),
+   *   2. aria-expanded true/false → the widget's own claim,
+   *   3. the owned listbox exists but is off screen → closed,
+   *   4. the owned listbox is on screen but empty → open (an empty open listbox),
+   *   5. no owned listbox and no aria-expanded → a visible listbox inside THIS widget.
+   */
+  function resolveListboxOpen(node: Element): { open: boolean; signal: "listbox-visible" | "aria-expanded" } | undefined {
+    const owned = node.getAttribute("aria-controls") ?? node.getAttribute("aria-owns");
+    // Portalled menus (react-select, Radix) live outside the widget, so resolve by id first.
+    const list = owned ? document.getElementById(owned) : null;
+    const listShown = list !== null && nodeVisible(list);
+    if (listShown && list.querySelector('[role="option"]') !== null) return { open: true, signal: "listbox-visible" };
+    const exp = node.getAttribute("aria-expanded");
+    if (exp === "true") return { open: true, signal: "aria-expanded" };
+    if (exp === "false") return { open: false, signal: "aria-expanded" };
+    if (list) return { open: listShown, signal: "listbox-visible" };
+    const scope = widgetScope(node);
+    const inScope = scope ? scope.querySelector('[role="listbox"], [role="menu"]') : null;
+    if (inScope) return { open: nodeVisible(inScope), signal: "listbox-visible" };
+    return undefined; // cannot tell → never claim either way
+  }
+
+  /**
+   * D1 (live-measured on Greenhouse/react-select): resolve the COMMITTED selection for a
+   * combobox — the value the form actually submits — in strict precedence:
+   *   1. a named hidden carrier (Workday / some Lever forms use one),
+   *   2. else the rendered committed-selection display (react-select .select__single-value
+   *      or an equivalent selected-value node),
+   *   3. NEVER the search input — react-select CLEARS it on commit, which is exactly the
+   *      false-failure source.
+   * Returns undefined when nothing resolves, so the caller fails closed (G2).
+   */
+  function resolveCommitted(node: Element): { value: string; signal: "carrier" | "display" } | undefined {
+    // SCOPE IS THE WHOLE GAME (see widgetScope): one combobox must never read another's value.
+    const scope = widgetScope(node);
+    if (!scope) return undefined; // no identifiable widget container → fail closed (G2)
+
+    // (1) a named hidden carrier inside THIS widget holding a non-empty value
+    const carriers = scope.querySelectorAll('input[type="hidden"][name], select[name]');
+    for (let c = 0; c < carriers.length; c++) {
+      const cv = (carriers[c] as unknown as { value?: string }).value ?? "";
+      if (cv.trim() !== "") return { value: cv.trim(), signal: "carrier" };
+    }
+    // (2) the rendered committed-selection display inside THIS widget. react-select renders
+    // single-value ONLY when a value is committed, so this cannot manufacture a selection.
+    const display = scope.querySelector(
+      '[class*="single-value"], [class*="singleValue"], [class*="multi-value__label"], [class*="multiValue"]',
+    );
+    const dt = display ? (display.textContent ?? "").replace(/\s+/g, " ").trim() : "";
+    if (dt !== "") return { value: dt, signal: "display" };
+    return undefined;
+  }
+
   if (tag === "input") {
     const t = (el.getAttribute("type") ?? "text").toLowerCase();
     if (t === "checkbox" || t === "radio") checked = anyEl.checked;
     else if (t !== "password") value = anyEl.value;
+    // An <input role="combobox"> (react-select et al) hits THIS branch, not the role branch
+    // below — so the committed-value resolution must live here too.
+    if (el.getAttribute("role") === "combobox") {
+      const c = resolveCommitted(el);
+      if (c) {
+        committedValue = c.value;
+        committedSignal = c.signal;
+      }
+      const lb = resolveListboxOpen(el);
+      if (lb) {
+        listboxOpen = lb.open;
+        listboxSignal = lb.signal;
+      }
+    }
   } else if (tag === "textarea") {
     value = anyEl.value;
   } else if (tag === "select") {
@@ -38,11 +148,24 @@ export function readElementState(ref: string): ElementStateResult {
     const selected = list?.querySelector('[aria-selected="true"]');
     value = selected ? (selected.textContent ?? "").replace(/\s+/g, " ").trim() : undefined;
     selectedLabel = value; // a combobox's rendered value IS its label
+    const c = resolveCommitted(el);
+    if (c) {
+      committedValue = c.value;
+      committedSignal = c.signal;
+    }
+    const lb = resolveListboxOpen(el);
+    if (lb) {
+      listboxOpen = lb.open;
+      listboxSignal = lb.signal;
+    }
   }
   const disabled = anyEl.disabled === true || el.getAttribute("aria-disabled") === "true";
-  const invalid =
+  // A committed combobox is NOT invalid just because its search input is empty: react-select
+  // clears that input on commit, so checkValidity() false-flags a field whose value landed.
+  const nativeInvalid =
     el.getAttribute("aria-invalid") === "true" ||
     (typeof anyEl.checkValidity === "function" ? !anyEl.checkValidity() : false);
+  const invalid = nativeInvalid && !(committedValue !== undefined && el.getAttribute("aria-invalid") !== "true");
   const style = getComputedStyle(el as Element);
   const visible =
     !(el as HTMLElement).hidden &&
@@ -52,7 +175,15 @@ export function readElementState(ref: string): ElementStateResult {
   const out: ElementStateResult = { found: true, disabled, invalid, visible };
   if (value !== undefined && value !== "") out.value = value;
   if (selectedLabel !== undefined && selectedLabel !== "") out.selectedLabel = selectedLabel;
+  if (committedValue !== undefined && committedValue !== "") {
+    out.committedValue = committedValue;
+    if (committedSignal) out.committedSignal = committedSignal;
+  }
   if (checked !== undefined) out.checked = checked;
+  if (listboxOpen !== undefined) {
+    out.listboxOpen = listboxOpen;
+    if (listboxSignal) out.listboxSignal = listboxSignal;
+  }
   return out;
 }
 

@@ -128,6 +128,7 @@ export class Session {
   private readonly revisioner = new Revisioner();
   private readonly fingerprints = new Map<string, LocatorFingerprint>();
   private captureSeq = 0;
+  private navMs = 0; // navigation-settle time accumulated within the current act() batch
   private readonly ttl: number;
 
   constructor(private readonly deps: SessionDeps) {
@@ -161,6 +162,7 @@ export class Session {
     const caps = checkBatchCaps(batch.actions);
     if (!caps.ok) throw new BatchCapError(caps);
 
+    this.navMs = 0; // accumulates navigation-settle time during this batch (page-load ms)
     let working = await this.capture();
     this.revisioner.commit(working);
 
@@ -183,7 +185,9 @@ export class Session {
 
       if (step.pageChanged) {
         const before = working;
-        working = await this.capture();
+        const t0 = performance.now();
+        working = await this.capture(); // waiting out the navigation settle here = page-load time
+        this.navMs += performance.now() - t0;
         this.revisioner.evaluate(working);
         const nav = this.detectNavigation(before, working);
         if (nav) {
@@ -205,7 +209,7 @@ export class Session {
     // interruption the fresh state already lives in the interruption's own view, so skip.
     const finalView = interruption ? working : await this.capture();
     const invalidFields = finalView.elements.filter((e) => e.invalid).map(rawToRecord);
-    const result: BatchResult = { status, revision: this.revisioner.current, completed, results };
+    const result: BatchResult = { status, revision: this.revisioner.current, completed, results, pageLoadMs: Math.round(this.navMs) };
     if (interruption) result.interruption = interruption;
     if (invalidFields.length) result.invalidFields = invalidFields;
     return result;
@@ -392,7 +396,9 @@ export class Session {
     if (authz.decision === "needs_confirmation") {
       return this.confirmationStep(action.op, label, authz);
     }
+    const t0 = performance.now();
     await this.deps.page.goto(url);
+    this.navMs += performance.now() - t0; // the goto's own settle counts as page-load time
     this.audit(action.op, label, authz.audit.code, "verified");
     return { results: [{ target: label, status: "verified" }], pageChanged: true };
   }
@@ -557,12 +563,22 @@ export class Session {
     if (action.op === "select") {
       const state = await page.readState(element.ref);
       const wanted = Array.isArray(action.value) ? action.value : [action.value];
-      // Accept a match on the option VALUE or its visible LABEL (field-fix #1): the
-      // backend resolves either when selecting, so verifying only against `value`
-      // false-fails a select that actually succeeded (e.g. "Oregon" vs value "OR").
-      const matches = (obs: string | undefined, w: string) => obs !== undefined && (obs === w || obs.includes(w));
-      const ok = wanted.some((w) => matches(state.value, w) || matches(state.selectedLabel, w));
-      const observed = [state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
+      // D1: verify against the COMMITTED value, in the same precedence the extractor
+      // resolves it — carrier/display (`committedValue`) → selectedLabel → value. Reading
+      // only `value` false-failed every react-select field, whose search input is CLEARED
+      // on commit (the value lives in a paired carrier or the rendered selected-value).
+      // G1: still VALUE MATCHING, not presence checking — the committed value must equal
+      // the intended one (or contain it, e.g. intended "United States" vs committed
+      // "United States of America"). The reverse direction is deliberately NOT accepted:
+      // a partially-committed value must never pass. G2: if nothing resolves, mismatch.
+      const matches = (obs: string | undefined, w: string): boolean => {
+        if (obs === undefined) return false;
+        const o = obs.trim().toLowerCase();
+        const x = w.trim().toLowerCase();
+        return o !== "" && (o === x || o.includes(x));
+      };
+      const ok = wanted.some((w) => matches(state.committedValue, w) || matches(state.selectedLabel, w) || matches(state.value, w));
+      const observed = [state.committedValue, state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
       return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed } };
     }
     if (action.op === "set_date") {
@@ -641,10 +657,24 @@ function primitiveFailure(out: { ok: false; reason: string; detail?: string; ava
   }
 }
 
-function widgetFailure(out: { ok: false; reason: string; availableOptions?: string[]; widgetHint?: string; detail?: string }): FailureDetail {
+function widgetFailure(out: {
+  ok: false;
+  reason: string;
+  availableOptions?: string[];
+  widgetHint?: string;
+  detail?: string;
+  widgetState?: "closed" | "unknown";
+}): FailureDetail {
   switch (out.reason) {
     case "option_not_found":
       return { reason: "option_not_found", availableOptions: out.availableOptions ?? [] };
+    // D4(b): never downgrade this to option_not_found:[] — that would re-assert the lie.
+    case "options_not_visible":
+      return {
+        reason: "options_not_visible",
+        widgetState: out.widgetState ?? "unknown",
+        ...(out.detail ? { detail: out.detail } : {}),
+      };
     case "widget_unrecognized":
       return { reason: "widget_unrecognized", ...(out.widgetHint ? { widgetHint: out.widgetHint } : {}) };
     case "disabled":

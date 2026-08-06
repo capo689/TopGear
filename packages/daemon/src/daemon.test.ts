@@ -1,4 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { startFixtureFarm, type FixtureFarm, FIXTURES } from "@browser-bridge/fixture-farm";
 import { createPlaywrightBackend } from "@browser-bridge/browser-playwright";
 import { MemorySink } from "@browser-bridge/audit";
@@ -48,6 +52,34 @@ describe("Daemon", () => {
     await daemon.detach(attach.sessionId);
     await daemon.detach(scoped.sessionId);
   }, 30_000);
+
+  it("eval telemetry: each attach starts a NEW run (runs never merge in one process)", async () => {
+    // The bug this guards: a frozen construction-time runIndex would stamp every event 0 and
+    // silently merge all runs. Drive attach → act → act → attach → act into ONE daemon and
+    // assert the emitted events split into TWO runs with the right per-run turn counts.
+    const logPath = join(tmpdir(), `bb-eval-${randomUUID()}.jsonl`);
+    process.env.BB_EVAL_LOG = logPath;
+    const backend = await createPlaywrightBackend({ headless: true });
+    const d = new Daemon({ backend, auditSink: new MemorySink() }); // reads BB_EVAL_LOG at construction
+    try {
+      const a1 = await d.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+      await d.act(a1.sessionId, { actions: [{ op: "fill", target: { name: "Email" }, value: "a@b.com" }] });
+      await d.act(a1.sessionId, { actions: [{ op: "fill", target: { name: "First name" }, value: "Ada" }] });
+      const a2 = await d.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });
+      await d.act(a2.sessionId, { actions: [{ op: "fill", target: { name: "Email" }, value: "c@d.com" }] });
+
+      const events = readFileSync(logPath, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { runIndex: number });
+      const perRun = new Map<number, number>();
+      for (const e of events) perRun.set(e.runIndex, (perRun.get(e.runIndex) ?? 0) + 1);
+      expect([...perRun.keys()].sort()).toEqual([0, 1]); // TWO distinct runs, not merged into one
+      expect(perRun.get(0)).toBe(3); // run 0: attach + 2 acts
+      expect(perRun.get(1)).toBe(2); // run 1: attach + 1 act
+    } finally {
+      delete process.env.BB_EVAL_LOG;
+      await d.shutdown();
+      rmSync(logPath, { force: true });
+    }
+  }, 40_000);
 
   it("views and acts through the session, enforcing the grant", async () => {
     const { sessionId } = await daemon.attach({ grant: grant(), url: farm.url + FIXTURES.nativeForm });

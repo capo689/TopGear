@@ -10,6 +10,18 @@ import { ConfirmationCapability } from "./grant.js";
  */
 export const FailureDetail = z.discriminatedUnion("reason", [
   z.object({ reason: z.literal("option_not_found"), availableOptions: z.array(z.string()) }),
+  /**
+   * D4: the runtime could not READ this widget's options, so it does not know what it has.
+   * Distinct from `option_not_found` with an empty list, which asserts the field genuinely
+   * offers nothing. "I could not look" and "there is nothing there" are different facts and
+   * an agent acts differently on each: `closed` → reopen the widget and retry; `unknown` →
+   * the widget exposes no open/closed state, fall back to a view or screenshot.
+   */
+  z.object({
+    reason: z.literal("options_not_visible"),
+    widgetState: z.enum(["closed", "unknown"]),
+    detail: z.string().optional(),
+  }),
   z.object({ reason: z.literal("ambiguous_target"), candidates: z.array(ElementRecord) }),
   z.object({ reason: z.literal("stale_target"), freshView: SemanticView.optional() }),
   z.object({ reason: z.literal("widget_unrecognized"), widgetHint: z.string().optional() }),
@@ -65,5 +77,11 @@ export const BatchResult = z.object({
   results: z.array(ActionResult),
   interruption: Interruption.optional(),
   invalidFields: z.array(ElementRecord).optional(),
+  /**
+   * Milliseconds the daemon spent waiting for navigation to settle during this batch (goto +
+   * post-navigation re-capture). The daemon is the only component that knows when the page
+   * settled, so it reports it here for the live-tier eval recorder to subtract from wall clock.
+   */
+  pageLoadMs: z.number().nonnegative().optional(),
 });
 export type BatchResult = z.infer<typeof BatchResult>;
