@@ -5,7 +5,13 @@ with a note beats a dishonest pass. Test counts are from `pnpm test` (Turbo).
 
 ---
 
-## WAVE "PROVE THE CORE ON REALITY" — results so far (Gates A and B PASS; C/D2/D3 open)
+## WAVE "PROVE THE CORE ON REALITY" — results (Gate B PASS; Gate A 13/14 via artifact; C/D2/D3 open)
+
+> ⚠ **RETRACTION — the "GATE A — PASS, 15/15" section below is SUPERSEDED and INVALID.** It was
+> measured by driving source/dist with direct Playwright scripts, NOT the shipping `.mcpb`. The
+> installed artifact predated the fix by 30h and did not contain it (F1). The authoritative Gate A
+> result is the artifact-path run: **13/14, NOT a pass** — see "F1/F2/F3" below. The 15/15 table is
+> kept only as the record of what a source-path gate wrongly certified.
 
 **§0 precision item — ANSWERED.** `readElementState`'s branches are `if/else if` on `tag`, and
 `role === "combobox"` is only the FINAL `else if`. Greenhouse's widget is `<input role="combobox">`,
@@ -13,12 +19,12 @@ so **`tag === "input"` fires first** and returns the cleared search input's `.va
 `role=combobox` branch NEVER executes for it. (My first report said "aria-selected text of the
 listbox" — that was wrong; the second report was right. The fix landed on the branch that runs.)
 
-**GATE A — PASS, 15/15** on the live Discord form (per-field table in the D1 section below).
+**GATE A — [RETRACTED, see above] 15/15 via the SOURCE path** on the live Discord form (per-field table in the D1 section below).
 **GATE B — PASS, 5/5** live harvest (first ever live run of the scrape leg; table below).
 **Still open:** Track C harness, submit-truth on a controlled form, D2 (pageLoadMs), D3
 (fill_record telemetry), full-suite clean-install count. Not aggregated into a pass.
 
-### GATE A — form leg, per field (live Discord form, real options, ladder actuation UNCHANGED)
+### GATE A — form leg, per field — ⚠ SUPERSEDED (source path, not the shipping artifact)
 
 | field | intended | committed value read | signal | verified |
 |---|---|---|---|---|
@@ -40,7 +46,7 @@ listbox" — that was wrong; the second report was right. The fix landed on the 
 
 **15/15.** Every field also read `committedValue = (none)` BEFORE its pick (fail-closed intact per
 field) and `invalid = false` after (the false-flagging is gone). All 15 resolved via the `display`
-signal — no hidden carrier exists on Greenhouse; the carrier branch is exercised by Workday/Lever
+signal — ⚠ (RETRACTED by F3: Greenhouse DOES have 9 anonymous required carriers) the carrier branch is exercised by Workday/Lever
 in Track C. Guardrails, each live-verified:
 - **G1 value-matching, NOT presence-checking:** negative control on GitLab — committing "United
   Kingdom" while intending "United States of America" **FAILS** verification. Confirmed.
@@ -61,7 +67,7 @@ not certify the shipped resolver. Re-run against the shipped build:
 | **(b) cross-field leak** — commit "Male" in Gender, verify UNTOUCHED Race against "Male" | untouched Race `committedValue = undefined` → verify **FAIL ✅** (no leak). This is the exact failure mode the "+1" bleed proved live, now controlled against |
 | **(c) `invalid` false-negative** — does an EMPTY required field still report invalid? | **YES ✅** — empty required `firstName` and `agreeTerms` both `invalid=true`; filling `firstName` clears it to false. No false negative introduced by the false-positive fix |
 
-**Honest caveat on (c):** the control is **inconclusive on Greenhouse** — its required fields are
+**Honest caveat on (c) — ⚠ RETRACTED, see F2 below (Greenhouse is MIXED: nat 9 / aria 14).** The original claim was: the control is **inconclusive on Greenhouse** — its required fields are
 `aria-required` only, so native `checkValidity()` returns `true` even when empty and the page never
 reported them invalid at all. The meaningful control had to run where native validity actually
 fires (real `required` attributes). Recorded rather than glossed: on aria-required-only forms the
@@ -91,6 +97,76 @@ product — reusing one `data-bb-ref` across fields made `querySelector` always 
 
 No reality gap found in the scrape leg on this vendor. Generalization to a 2nd content site is
 Track C's C2 and is NOT claimed here.
+
+## F1/F2/F3 — the fix was NOT in the shipping artifact (Fable, blocking)
+
+**F1 CONFIRMED, and it is the same meta-defect a third time.** The installed `.mcpb` predated the
+D1 fix by 30h: `committedValue` occurrences — installed bundle **0**, source **6**. My Gate A drove
+source/dist via direct Playwright scripts, so it never executed the artifact users install.
+
+**Rebuilt via the tracked script** (`pnpm build:mcpb`) → bundle now contains the resolver (8
+occurrences). Re-running Gate A **through the product path** (the bundle's own `server/index.js`
+driven over MCP with `bridge_attach`/`bridge_view`/`bridge_act`) then exposed a SECOND, real gap
+the script-based gate had hidden:
+
+> **The D1 fix was incomplete.** It landed in the ladder's `verifyContains` + the extractor, but
+> **`session.ts`'s outer select verify — the code that produces the reported result — never
+> consulted `committedValue`** (it read only `value` / `selectedLabel`). The product path goes
+> through session.ts; my script path did not. Fixed: session.ts now uses the same precedence
+> (`committedValue` → `selectedLabel` → `value`), still **value-matching** (G1), still
+> **mismatch when nothing resolves** (G2). The reverse containment direction
+> (`wanted.includes(observed)`) is deliberately NOT accepted, so a partial commit can never pass.
+
+### GATE A — re-run through the SHIPPING ARTIFACT: 13/14 (NOT a pass)
+
+| field | intended | result |
+|---|---|---|
+| School / Degree / Discipline | Aalborg University / Associate's Degree / Accounting | ✅ verified |
+| 3 × work-authorization questions | Yes | ✅ verified |
+| Gender* / Race and Ethnicity* / Veteran Status* / Disability Status* | Male / American Indian or Alaska Native / I am not a protected veteran / No, I do not have a disability… | ✅ verified |
+| Gender Identity / Race or Ethnicity / LGBTQIA+ (optional) | Man / Black or of African descent / Yes | ✅ verified |
+| **Country\*** | "United States" → then its real option "United States +1" | ❌ **failed**, `observed: "+1"` |
+| Location (City)* | — | ➖ free-text, not a combobox |
+
+**The one failure, honestly:** `Country*` is the **phone dial-code** react-select. Its real option
+label is "United States +1" but it commits the **transformed** value `+1`. Verification correctly
+refuses it: accepting `+1` for "United States +1" would require the `wanted.includes(observed)`
+direction that lets partial commits pass — reintroducing false-success to buy a green number. **Not
+done.** This widget class (display label ≠ committed value) needs a per-widget transform rule and
+is carried as an OPEN item, not aggregated away.
+
+### F2 — invalid negative control, re-run ON GREENHOUSE (my earlier caveat was WRONG)
+
+Census matches Fable exactly: **`{nat: 9, aria: 14, inv: 9, total: 36}`** — Greenhouse is **mixed**,
+not aria-only. My previous claim was measured on the wrong surface and is retracted.
+
+Re-run on the real risk surface: an **empty required carrier paired with an uncommitted
+react-select** → product reports **`invalid = true` ✅ still fires**. No false negative introduced.
+
+### F3 — Greenhouse DOES have carriers (truth-signal precedence refined)
+
+The 9 natively-required fields are anonymous `INPUT/text` with class `remix-css-…-required`, one
+paired with each required combobox:
+
+| carrier | paired field |
+|---|---|
+| [0]–[4] | Country*, Location (City)*, and the 3 work-authorization questions |
+| [5]–[8] | Gender*, Race and Ethnicity*, Veteran Status*, Disability Status* |
+
+Measured behaviour: the carrier is react-select's HTML5-validation proxy — **present-and-empty
+while uncommitted** (so `invalid` fires correctly), and on commit the required-carrier count goes
+**9 → 8** (Fable's observation reproduced). So precedence #1 (carrier) is what makes the *invalid*
+signal correct, and the rendered display is what makes the *committed value* readable after commit.
+Both are live, and neither can manufacture false success.
+
+**Standing rule added (CLAUDE.md):** any gate claiming a capability works must exercise the artifact
+that ships. Three instances of this meta-defect are now on record: fixtures certified our
+assumptions; the G1 control certified a resolver since rewritten; Gate A certified source not in the
+bundle.
+
+Full suite after the session.ts fix: **258 tests / 43 tasks green**, build 25/25.
+
+---
 
 ## D1 DIAGNOSIS — combobox actuation (live, before any fix) → WORLD B (verifying blind)
 

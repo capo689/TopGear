@@ -154,3 +154,10 @@ the builder) before the next milestone begins. Keep current at all times:
 
 Two failed attempts at the same bug → stop, write up what you know in
 `MILESTONE_STATUS.md`, and flag for escalation rather than thrashing.
+
+## Gate integrity (standing rule, added after the third artifact/source divergence)
+
+- **Any gate claiming a capability works MUST exercise the artifact that ships** — the built
+  `.mcpb` driven through the MCP tool surface, not source, dist, or a direct Playwright script.
+  A gate that bypasses the shipping artifact is not a gate. Rebuild (`pnpm build:mcpb`) before
+  gating, and state the artifact's build time + a fingerprint of the fix in the report.

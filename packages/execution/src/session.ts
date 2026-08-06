@@ -563,12 +563,22 @@ export class Session {
     if (action.op === "select") {
       const state = await page.readState(element.ref);
       const wanted = Array.isArray(action.value) ? action.value : [action.value];
-      // Accept a match on the option VALUE or its visible LABEL (field-fix #1): the
-      // backend resolves either when selecting, so verifying only against `value`
-      // false-fails a select that actually succeeded (e.g. "Oregon" vs value "OR").
-      const matches = (obs: string | undefined, w: string) => obs !== undefined && (obs === w || obs.includes(w));
-      const ok = wanted.some((w) => matches(state.value, w) || matches(state.selectedLabel, w));
-      const observed = [state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
+      // D1: verify against the COMMITTED value, in the same precedence the extractor
+      // resolves it — carrier/display (`committedValue`) → selectedLabel → value. Reading
+      // only `value` false-failed every react-select field, whose search input is CLEARED
+      // on commit (the value lives in a paired carrier or the rendered selected-value).
+      // G1: still VALUE MATCHING, not presence checking — the committed value must equal
+      // the intended one (or contain it, e.g. intended "United States" vs committed
+      // "United States of America"). The reverse direction is deliberately NOT accepted:
+      // a partially-committed value must never pass. G2: if nothing resolves, mismatch.
+      const matches = (obs: string | undefined, w: string): boolean => {
+        if (obs === undefined) return false;
+        const o = obs.trim().toLowerCase();
+        const x = w.trim().toLowerCase();
+        return o !== "" && (o === x || o.includes(x));
+      };
+      const ok = wanted.some((w) => matches(state.committedValue, w) || matches(state.selectedLabel, w) || matches(state.value, w));
+      const observed = [state.committedValue, state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
       return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed } };
     }
     if (action.op === "set_date") {
