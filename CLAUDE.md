@@ -165,8 +165,12 @@ Two failed attempts at the same bug → stop, write up what you know in
 - Gates default to the distributable and hard-fail when it is missing. A throwaway build is
   available only behind an explicit `--ephemeral`, which must announce that the run proves the
   code compiles and does NOT gate the shipped artifact.
-- Every gate report states: artifact path, build time, **sha256**, and a fingerprint of the fix
-  grepped from inside the bundle. The sha in the report must match the sha of the distributable.
+- Every gate report states: artifact path, build time, the bundle **sha256**, the **code sha256**
+  (`server/index.js` inside the bundle), and a fingerprint of the fix grepped from inside it.
+  The bundle sha says WHICH FILE was exercised; the code sha says WHICH CODE. Report both.
+- The `.mcpb` is **not byte-reproducible** — it is a zip, and zips embed mtimes, so two builds of
+  identical source differ (measured: `c31d0b82…` vs `e9de3b83…`, contents byte-identical). Never
+  "verify" an artifact by rebuilding and comparing bundle hashes; compare the code sha.
 - **This defect class has now recurred four times. Name it when you see it:**
   1. fixture tests certified *assumptions* rather than observed reality;
   2. the G1 negative control certified a resolver that had since been *rewritten*;

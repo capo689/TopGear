@@ -48,12 +48,13 @@ const artifact = resolveArtifact(argv, root);
 console.log(`\nartifact: ${artifact.path}`);
 console.log(`kind:     ${artifact.kind}`);
 console.log(`built:    ${artifact.built}`);
-console.log(`sha256:   ${artifact.sha256}\n`);
+console.log(`sha256:   ${artifact.sha256}   (bundle — a zip, so it changes every build)`);
 
 const rows = [];
 for (const v of VENDORS) {
   if (only && only !== v.key) continue;
   const client = startArtifactServer(artifact);
+  if (rows.length === 0) console.log(`code sha: ${client.serverSha256}   (server/index.js — stable across rebuilds)\n`);
   try {
     await client.handshake();
     const origin = new URL(v.url).origin;

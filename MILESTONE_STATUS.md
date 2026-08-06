@@ -19,11 +19,20 @@ path + kind + build time + **sha256** + an in-bundle fingerprint. CLAUDE.md now 
 recurrences of this defect class (fixtures certified assumptions → the G1 control certified a
 rewritten resolver → Gate A certified source not in the bundle → D4 certified a temp bundle).
 
-**THE DISTRIBUTABLE**, rebuilt from `e38e742`:
-`~/Desktop/scratchpad/browser-bridge.mcpb`, 4 248 777 bytes,
-sha256 **`c31d0b8256052004e2876cb5ae1f24a6872abc4a7eb8603432a81fc6eb7a87f7`**.
+**THE DISTRIBUTABLE**, rebuilt from `e38e742`: `~/Desktop/scratchpad/browser-bridge.mcpb`,
+4 248 777 bytes.
+- bundle sha256 **`c31d0b8256052004e2876cb5ae1f24a6872abc4a7eb8603432a81fc6eb7a87f7`** — which FILE
+- code sha256 **`9a89f5449dc26f7a9b2c043ec1ae5f3e9e2714f11529170af7ba3063e9f3a75b`** (`server/index.js`) — which CODE
+
 Markers grepped INSIDE `server/index.js`: `committedValue` 10 (D1), `options_not_visible` 4,
 `listboxOpen` 16, `restoreClosed` 8, `widgetScope` 3 (D4).
+
+**Found while closing the chain: the `.mcpb` is NOT byte-reproducible.** It is a zip, and zips
+embed mtimes, so rebuilding identical source gave `e9de3b83…` against the distributable's
+`c31d0b82…` — with `diff -rq` showing byte-identical contents and the same
+`server/index.js` hash. The build script claimed "reproducible build"; that claim was false and
+is corrected. Consequence for gate integrity: **never verify an artifact by rebuilding and
+comparing bundle hashes** — compare the code sha. Every gate now prints both.
 
 | gate | result | artifact sha it loaded |
 |---|---|---|

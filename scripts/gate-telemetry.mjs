@@ -30,7 +30,7 @@ const artifact = resolveArtifact(process.argv.slice(2), root);
 console.log(`\nartifact: ${artifact.path}`);
 console.log(`kind:     ${artifact.kind}`);
 console.log(`built:    ${artifact.built}`);
-console.log(`sha256:   ${artifact.sha256}\n`);
+console.log(`sha256:   ${artifact.sha256}   (bundle — a zip, so it changes every build)`);
 
 const { startFixtureFarm, FIXTURES } = await import(join(root, "apps/fixture-farm/dist/index.js"));
 const farm = await startFixtureFarm({ port: PORT, host: "127.0.0.1" });
@@ -43,6 +43,7 @@ const check = (label, pass, detail) => {
 
 const logPath = join(tmpdir(), `bb-gate-tel-${randomUUID()}.jsonl`);
 const on = startArtifactServer(artifact, { BB_EVAL_LOG: logPath });
+console.log(`code sha: ${on.serverSha256}   (server/index.js — stable across rebuilds)\n`);
 try {
   await on.handshake();
   const grant = grantFor(ORIGIN, "gate-telemetry");

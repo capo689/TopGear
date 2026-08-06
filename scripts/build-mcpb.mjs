@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Reproducible build of browser-bridge.mcpb from a clean checkout.
+ * Build browser-bridge.mcpb from a clean checkout.
+ *
+ * NOT byte-reproducible: the .mcpb is a zip and zips embed mtimes, so two builds of identical
+ * code produce different bundle hashes (measured: c31d0b82… vs e9de3b83… with byte-identical
+ * contents). The stable identity is the sha256 of server/index.js, printed below alongside the
+ * bundle hash — that is the number that answers "is the fix in the thing we ship".
  *   1. esbuild the mcp-server bin (all workspace deps inlined; Playwright external)
  *   2. write manifest.json + package.json
  *   3. vendor Playwright (pinned to the workspace version; NO browser download)
@@ -118,5 +123,6 @@ try {
   execFileSync("zip", ["-r", "-q", "-X", out, "."], { cwd: work }); // .mcpb IS a zip
 }
 const sha = createHash("sha256").update(readFileSync(out)).digest("hex");
+const serverSha = createHash("sha256").update(readFileSync(join(work, "server/index.js"))).digest("hex");
 rmSync(work, { recursive: true, force: true });
-console.log(`\nbuilt: ${out}\nsha256: ${sha}`);
+console.log(`\nbuilt: ${out}\nsha256 (bundle, changes every build): ${sha}\nsha256 (server/index.js, the code): ${serverSha}`);

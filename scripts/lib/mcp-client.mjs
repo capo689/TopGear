@@ -6,6 +6,7 @@
  */
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +16,12 @@ export function startArtifactServer(artifact, env = {}) {
   execFileSync("unzip", ["-q", "-o", artifact.path, "-d", unpacked]);
   const serverJs = join(unpacked, "server/index.js");
   const source = readFileSync(serverJs, "utf8");
+  /**
+   * The .mcpb is a zip and zips embed mtimes, so the BUNDLE sha changes on every rebuild even
+   * when nothing changed. The stable identity of "what code is in there" is the hash of the
+   * server bundle itself — report both: the .mcpb sha says WHICH FILE, this says WHICH CODE.
+   */
+  const serverSha256 = createHash("sha256").update(source).digest("hex");
 
   const stderr = [];
   const proc = spawn("node", [serverJs], {
@@ -64,6 +71,8 @@ export function startArtifactServer(artifact, env = {}) {
   return {
     /** Source of the bundle's server, for fingerprinting the fix INSIDE the artifact. */
     source,
+    /** sha256 of the bundle's server/index.js — stable across rebuilds of identical code. */
+    serverSha256,
     /** Everything the server wrote to stderr (D5's startup line lands here). */
     stderrText: () => stderr.join(""),
     rpc,

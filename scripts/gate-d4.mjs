@@ -24,6 +24,7 @@ import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 import { resolveArtifact } from "./lib/artifact.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,6 +39,7 @@ const unpacked = mkdtempSync(join(tmpdir(), "bb-mcpb-run-"));
 execFileSync("unzip", ["-q", "-o", artifact.path, "-d", unpacked]);
 const serverJs = join(unpacked, "server/index.js");
 const serverSrc = readFileSync(serverJs, "utf8");
+const serverSha = createHash("sha256").update(serverSrc).digest("hex");
 // Fingerprint the fix INSIDE the artifact, so the report cannot claim a build it did not run.
 const fingerprint = {
   options_not_visible: serverSrc.includes("options_not_visible"),
@@ -49,7 +51,8 @@ console.log(`\nartifact:    ${artifact.path}`);
 console.log(`kind:        ${artifact.kind}`);
 console.log(`built:       ${artifact.built}`);
 console.log(`size:        ${artifact.size} bytes`);
-console.log(`sha256:      ${artifact.sha256}`);
+console.log(`sha256:      ${artifact.sha256}   (bundle — a zip, so it changes every build)`);
+console.log(`code sha256: ${serverSha}   (server/index.js — stable across rebuilds)`);
 console.log(`fingerprint: ${JSON.stringify(fingerprint)}\n`);
 
 // ---------------------------------------------------------------- fixture farm
