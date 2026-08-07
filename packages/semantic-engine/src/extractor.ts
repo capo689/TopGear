@@ -516,6 +516,15 @@ export function pageExtractor(options: ExtractOptions): RawView {
   let content: RawContentBlock[] | undefined;
   if (scope.kind === "content" || scope.kind === "full") {
     let root: Element = doc.body;
+    // Landmark scoping. `<main>` / `<article>` first, then the ARIA role equivalents for
+    // pages that never adopted the elements. Falls back to body rather than returning
+    // nothing when a page has no such landmark.
+    if (scope.kind === "content" && scope.landmark) {
+      const sel =
+        scope.landmark === "article" ? "article, [role='article']" : "main, [role='main']";
+      const found = doc.querySelector(sel);
+      if (found) root = found;
+    }
     if (scope.kind === "content" && scope.heading) {
       const headings = Array.from(doc.querySelectorAll("h1,h2,h3,h4,h5,h6"));
       const match = headings.find((h) => text(h).toLowerCase() === scope.heading!.toLowerCase());

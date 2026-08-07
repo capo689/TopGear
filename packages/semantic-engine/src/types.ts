@@ -64,7 +64,13 @@ export type ScopeInput =
   | { kind: "viewport" }
   | { kind: "invalid_fields" }
   | { kind: "full" }
-  | { kind: "content"; heading?: string }
+  /**
+   * `landmark` narrows the read to the page's main content region. Without it a content
+   * read roots at <body> and returns the whole chrome — nav, language lists, footer,
+   * references — which on a Wikipedia article is ~4x the bytes of the content asked for.
+   * The protocol has advertised region main/article since M1; nothing implemented them.
+   */
+  | { kind: "content"; heading?: string; landmark?: "main" | "article" }
   | { kind: "region"; nearRef?: string };
 
 export interface ExtractOptions {

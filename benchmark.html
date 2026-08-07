@@ -1,0 +1,103 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser Bridge vs generic browser tools</title><style>
+.viz{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+--grid:#e1e0d9;--base:#c3c2b7;--border:rgba(11,11,11,.10);--s1:#2a78d6;--s2:#eb6834;--good:#0ca30c;--crit:#d03b3b}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme=light])) .viz{--surface:#1a1a19;--plane:#0d0d0d;
+--ink:#fff;--ink2:#c3c2b7;--grid:#2c2c2a;--base:#383835;--border:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--crit:#e66767}}
+:root[data-theme=dark] .viz{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;--grid:#2c2c2a;
+--base:#383835;--border:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--crit:#e66767}
+*{box-sizing:border-box}body{margin:0;background:var(--plane);color:var(--ink);font-family:system-ui,-apple-system,sans-serif}
+.wrap{max-width:1020px;margin:0 auto;padding:32px 24px 72px}
+h1{font-size:23px;font-weight:650;margin:0 0 4px}
+.sub{color:var(--ink2);font-size:13.5px;margin:0 0 24px;line-height:1.55}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile .l{font-size:12px;color:var(--ink2);margin-bottom:5px}
+.tile .v{font-size:28px;font-weight:640;letter-spacing:-.02em}
+.tile .n{font-size:11px;color:var(--muted);margin-top:3px}
+.v.good{color:var(--good)}.v.crit{color:var(--crit)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+.card h2{font-size:15px;font-weight:640;margin:0 0 3px}
+.card p{font-size:13px;color:var(--ink2);margin:0 0 16px;line-height:1.55}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink2);margin-bottom:14px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--base);padding:7px 8px;font-size:11px;text-transform:uppercase}
+td{padding:6px 8px;border-bottom:1px solid var(--grid)}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--ink2)}
+.tt{position:fixed;pointer-events:none;background:var(--ink);color:var(--surface);padding:6px 9px;border-radius:6px;font-size:12px;opacity:0;z-index:9}
+.btn{position:absolute;top:30px;right:24px;background:var(--surface);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer}
+.wrap{position:relative}
+.note{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--s2);border-radius:8px;padding:14px 16px;font-size:13px;color:var(--ink2);line-height:1.6}
+</style></head>
+<body class="viz"><div class="wrap">
+<button class="btn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'">Toggle theme</button>
+<h1>Browser Bridge vs. driving a browser with generic tools</h1>
+<p class="sub">Five real tasks — two scrapes, two form fills, one search. <strong>Both arms actually executed</strong>, nothing modelled.
+Bridge ran through the shipping <span class="mono">.mcpb</span> over MCP stdio, exactly as Claude loads it. The generic arm ran
+Playwright doing what a browser tool does: navigate, read the page, act on one element at a time, read back to verify — one
+primitive per turn, because each is a separate call the model makes and waits for.
+Generated 2026-08-07T19:08:59.054Z.</p>
+
+<div class="tiles">
+<div class="tile"><div class="l">Total turns</div><div class="v good">3.1× fewer</div><div class="n">7 vs 22 across 5 tasks</div></div>
+<div class="tile"><div class="l">Best case (7-field form)</div><div class="v good">4.5× fewer</div><div class="n">2 turns vs 9</div></div>
+<div class="tile"><div class="l">Table rows kept intact</div><div class="v good">50/50</div><div class="n">generic tools: 37/50</div></div>
+<div class="tile"><div class="l">Context returned</div><div class="v crit">1.7× more</div><div class="n">294KB vs 173KB — see note</div></div>
+</div>
+
+<div class="card"><h2>Turns per task — lower is better</h2>
+<p>The metric that matters: a turn is a round trip the model pays for in latency and tokens. Counted identically on both sides.</p>
+<div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Browser Bridge</span>
+<span><span class="sw" style="background:var(--s2)"></span>Generic browser tools</span></div>
+<svg viewBox="0 0 880 282" width="100%" height="282" role="img" aria-label="Turns per task"><text x="198" y="34" fill="var(--ink2)" font-size="12" text-anchor="end">Scrape 50-row table</text><rect x="208" y="10" width="62.44444444444444" height="16" rx="4" fill="var(--s1)" data-t="Scrape 50-row table — Bridge: 1"/><text x="278.44444444444446" y="23" fill="var(--ink2)" font-size="11.5" font-weight="600">1</text><rect x="208" y="30" width="124.88888888888889" height="16" rx="4" fill="var(--s2)" data-t="Scrape 50-row table — Generic tools: 2"/><text x="340.8888888888889" y="43" fill="var(--ink2)" font-size="11.5" font-weight="600">2</text><text x="198" y="86" fill="var(--ink2)" font-size="12" text-anchor="end">Extract 6 infobox facts</text><rect x="208" y="62" width="62.44444444444444" height="16" rx="4" fill="var(--s1)" data-t="Extract 6 infobox facts — Bridge: 1"/><text x="278.44444444444446" y="75" fill="var(--ink2)" font-size="11.5" font-weight="600">1</text><rect x="208" y="82" width="187.33333333333331" height="16" rx="4" fill="var(--s2)" data-t="Extract 6 infobox facts — Generic tools: 3"/><text x="403.3333333333333" y="95" fill="var(--ink2)" font-size="11.5" font-weight="600">3</text><text x="198" y="138" fill="var(--ink2)" font-size="12" text-anchor="end">Fill 7-field form</text><rect x="208" y="114" width="124.88888888888889" height="16" rx="4" fill="var(--s1)" data-t="Fill 7-field form — Bridge: 2"/><text x="340.8888888888889" y="127" fill="var(--ink2)" font-size="11.5" font-weight="600">2</text><rect x="208" y="134" width="562" height="16" rx="4" fill="var(--s2)" data-t="Fill 7-field form — Generic tools: 9"/><text x="778" y="147" fill="var(--ink2)" font-size="11.5" font-weight="600">9</text><text x="198" y="190" fill="var(--ink2)" font-size="12" text-anchor="end">Fill form with no &lt;form&gt;</text><rect x="208" y="166" width="124.88888888888889" height="16" rx="4" fill="var(--s1)" data-t="Fill form with no &lt;form&gt; — Bridge: 2"/><text x="340.8888888888889" y="179" fill="var(--ink2)" font-size="11.5" font-weight="600">2</text><rect x="208" y="186" width="374.66666666666663" height="16" rx="4" fill="var(--s2)" data-t="Fill form with no &lt;form&gt; — Generic tools: 6"/><text x="590.6666666666666" y="199" fill="var(--ink2)" font-size="11.5" font-weight="600">6</text><text x="198" y="242" fill="var(--ink2)" font-size="12" text-anchor="end">Search + read first result</text><rect x="208" y="218" width="62.44444444444444" height="16" rx="4" fill="var(--s1)" data-t="Search + read first result — Bridge: 1"/><text x="278.44444444444446" y="231" fill="var(--ink2)" font-size="11.5" font-weight="600">1</text><rect x="208" y="238" width="124.88888888888889" height="16" rx="4" fill="var(--s2)" data-t="Search + read first result — Generic tools: 2"/><text x="340.8888888888889" y="251" fill="var(--ink2)" font-size="11.5" font-weight="600">2</text><line x1="208" y1="6" x2="208" y2="272" stroke="var(--base)" stroke-width="1"/></svg></div>
+
+<div class="card"><h2>Data fidelity — the difference that isn't speed</h2>
+<p>Wikipedia rowspans the Headquarters column across runs of rows sharing a country. Flat text extraction drops the spanned
+cell, so 13 of 50 companies come back with no country and <strong>nothing signals the loss</strong>. Bridge resolves the table
+to a real occupancy grid and repeats the value into every row it covers. This is a wrong answer versus a right one, not a slow
+answer versus a fast one.</p>
+<div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Browser Bridge</span>
+<span><span class="sw" style="background:var(--s2)"></span>Generic browser tools</span></div>
+<svg viewBox="0 0 880 74" width="100%" height="74" role="img" aria-label="Fidelity"><text x="198" y="34" fill="var(--ink2)" font-size="12" text-anchor="end">Rows keeping their country</text><rect x="208" y="10" width="562" height="16" rx="4" fill="var(--s1)" data-t="Rows keeping their country — Bridge: 50/50"/><text x="778" y="23" fill="var(--ink2)" font-size="11.5" font-weight="600">50/50</text><rect x="208" y="30" width="415.88" height="16" rx="4" fill="var(--s2)" data-t="Rows keeping their country — Generic tools: 37/50"/><text x="631.88" y="43" fill="var(--ink2)" font-size="11.5" font-weight="600">37/50</text><line x1="208" y1="6" x2="208" y2="64" stroke="var(--base)" stroke-width="1"/></svg></div>
+
+<div class="card"><h2>Context returned per task — lower is better</h2>
+<p>Where the bridge currently loses.</p>
+<div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Browser Bridge</span>
+<span><span class="sw" style="background:var(--s2)"></span>Generic browser tools</span></div>
+<svg viewBox="0 0 880 282" width="100%" height="282" role="img" aria-label="Context per task"><text x="198" y="34" fill="var(--ink2)" font-size="12" text-anchor="end">Scrape 50-row table</text><rect x="208" y="10" width="44.19949428895283" height="16" rx="4" fill="var(--s1)" data-t="Scrape 50-row table — Bridge: 20KB"/><text x="260.1994942889528" y="23" fill="var(--ink2)" font-size="11.5" font-weight="600">20KB</text><rect x="208" y="30" width="22.662200942427035" height="16" rx="4" fill="var(--s2)" data-t="Scrape 50-row table — Generic tools: 10KB"/><text x="238.66220094242703" y="43" fill="var(--ink2)" font-size="11.5" font-weight="600">10KB</text><text x="198" y="86" fill="var(--ink2)" font-size="12" text-anchor="end">Extract 6 infobox facts</text><rect x="208" y="62" width="562" height="16" rx="4" fill="var(--s1)" data-t="Extract 6 infobox facts — Bridge: 258KB"/><text x="778" y="75" fill="var(--ink2)" font-size="11.5" font-weight="600">258KB</text><rect x="208" y="82" width="335.15428736063564" height="16" rx="4" fill="var(--s2)" data-t="Extract 6 infobox facts — Generic tools: 154KB"/><text x="551.1542873606356" y="95" fill="var(--ink2)" font-size="11.5" font-weight="600">154KB</text><text x="198" y="138" fill="var(--ink2)" font-size="12" text-anchor="end">Fill 7-field form</text><rect x="208" y="114" width="2" height="16" rx="4" fill="var(--s1)" data-t="Fill 7-field form — Bridge: 1KB"/><text x="218" y="127" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><rect x="208" y="134" width="2.7334402377675926" height="16" rx="4" fill="var(--s2)" data-t="Fill 7-field form — Generic tools: 1KB"/><text x="218.73344023776758" y="147" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><text x="198" y="190" fill="var(--ink2)" font-size="12" text-anchor="end">Fill form with no &lt;form&gt;</text><rect x="208" y="166" width="2" height="16" rx="4" fill="var(--s1)" data-t="Fill form with no &lt;form&gt; — Bridge: 0KB"/><text x="218" y="179" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><rect x="208" y="186" width="2" height="16" rx="4" fill="var(--s2)" data-t="Fill form with no &lt;form&gt; — Generic tools: 0KB"/><text x="218" y="199" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><text x="198" y="242" fill="var(--ink2)" font-size="12" text-anchor="end">Search + read first result</text><rect x="208" y="218" width="32.33044084810851" height="16" rx="4" fill="var(--s1)" data-t="Search + read first result — Bridge: 15KB"/><text x="248.3304408481085" y="231" fill="var(--ink2)" font-size="11.5" font-weight="600">15KB</text><rect x="208" y="238" width="15.899972326157089" height="16" rx="4" fill="var(--s2)" data-t="Search + read first result — Generic tools: 7KB"/><text x="231.8999723261571" y="251" fill="var(--ink2)" font-size="11.5" font-weight="600">7KB</text><line x1="208" y1="6" x2="208" y2="272" stroke="var(--base)" stroke-width="1"/></svg>
+<div class="note"><strong>Open issue, not a win.</strong> Bridge returns 1.6× more bytes overall. Two causes, both real:
+one block per table row repeats every column header (that is what buys the fidelity result above — a row stays readable on its
+own), and a content read still carries page furniture the caller did not ask for. The Apple article is the worst case at
+258KB vs 154KB. Reducing this without giving back the fidelity is the next piece of work.</div></div>
+
+<div class="card"><h2>Every task, both arms</h2>
+<table><thead><tr><th>Task</th><th class="n">Bridge</th><th class="n">Generic</th><th class="n">Ratio</th>
+<th class="n">Bridge ctx</th><th class="n">Generic ctx</th><th>Bridge result</th><th>Generic result</th></tr></thead>
+<tbody><tr><td>Scrape 50-row table</td><td class="n">1</td><td class="n">2</td>
+<td class="n">2.0x</td>
+<td class="n">20KB</td><td class="n">10KB</td>
+<td>50 rows, 50/50 keep country</td><td>50 rows, 37/50 keep country</td></tr><tr><td>Extract 6 infobox facts</td><td class="n">1</td><td class="n">3</td>
+<td class="n">3.0x</td>
+<td class="n">258KB</td><td class="n">154KB</td>
+<td>6/6 facts, labelled</td><td>6/6 facts, unlabelled</td></tr><tr><td>Fill 7-field form</td><td class="n">2</td><td class="n">9</td>
+<td class="n">4.5x</td>
+<td class="n">1KB</td><td class="n">1KB</td>
+<td>6 fields verified in 1 call</td><td>6 fields, 9 calls</td></tr><tr><td>Fill form with no &lt;form&gt;</td><td class="n">2</td><td class="n">6</td>
+<td class="n">3.0x</td>
+<td class="n">0KB</td><td class="n">0KB</td>
+<td>3/3 verified</td><td>3/3 filled</td></tr><tr><td>Search + read first result</td><td class="n">1</td><td class="n">2</td>
+<td class="n">2.0x</td>
+<td class="n">15KB</td><td class="n">7KB</td>
+<td>134 content blocks</td><td>111 text lines</td></tr></tbody></table></div>
+</div>
+<div class="tt" id="tt"></div>
+<script>
+const tt=document.getElementById('tt');
+document.addEventListener('mouseover',e=>{const t=e.target.getAttribute&&e.target.getAttribute('data-t');
+if(t){tt.textContent=t;tt.style.opacity=1;tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-28)+'px';}});
+document.addEventListener('mousemove',e=>{if(tt.style.opacity==='1'){tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-28)+'px';}});
+document.addEventListener('mouseout',e=>{if(e.target.getAttribute&&e.target.getAttribute('data-t'))tt.style.opacity=0;});
+</script></body></html>

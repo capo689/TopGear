@@ -75,10 +75,18 @@ function toScopeInput(scope: ViewScope): ScopeInput {
     case "invalid_fields":
     case "full":
       return { kind: scope.kind };
-    case "content":
-      return scope.region && scope.region.kind === "section"
-        ? { kind: "content", heading: scope.region.heading }
-        : { kind: "content" };
+    case "content": {
+      // Every region kind the protocol advertises must map to something the extractor can
+      // act on. Previously only `section` did, and main/article/element fell through to a
+      // bare content read — the caller asked to narrow the page and got the whole page
+      // back, with a success status and no indication the request was dropped.
+      const r = scope.region;
+      if (r?.kind === "section") return { kind: "content", heading: r.heading };
+      if (r?.kind === "main") return { kind: "content", landmark: "main" };
+      if (r?.kind === "article") return { kind: "content", landmark: "article" };
+      if (r?.kind === "element") return { kind: "region", ...(r.target?.ref ? { nearRef: r.target.ref } : {}) };
+      return { kind: "content" };
+    }
     case "region":
       return { kind: "full" };
   }

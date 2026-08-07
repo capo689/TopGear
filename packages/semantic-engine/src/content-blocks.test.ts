@@ -157,3 +157,57 @@ describe("content blocks — other previously-dropped shapes", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("content blocks — landmark scoping", () => {
+  /**
+   * The protocol has advertised `region: {kind:"main"}` and `{kind:"article"}` since M1
+   * and NOTHING implemented them: the region was dropped on the way to the extractor and
+   * the caller got the whole <body> back, with a success status and no signal that the
+   * narrowing they asked for had been ignored. Measured on a live Wikipedia article, an
+   * unscoped read returns ~4x the bytes of the content actually requested.
+   */
+  it("roots a main-scoped read at <main>, excluding nav, header and footer", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "content", landmark: "main" }));
+    const texts = (raw.content ?? []).map((b) => b.text);
+
+    expect(texts).toContain("Body paragraph that belongs to the main content.");
+    expect(texts.some((t) => t.includes("Nav link one"))).toBe(false);
+    expect(texts.some((t) => t.includes("Footer boilerplate"))).toBe(false);
+    expect(texts.some((t) => t.includes("Site header boilerplate"))).toBe(false);
+    await page.close();
+  }, 30_000);
+
+  it("still reads structured content inside the landmark", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "content", landmark: "main" }));
+    const tables = (raw.content ?? []).filter((b) => b.kind === "table").map((b) => b.text);
+
+    expect(tables).toContain("Item: Alpha | Value: 1");
+    await page.close();
+  }, 30_000);
+
+  it("roots an article-scoped read at <article>", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "content", landmark: "article" }));
+    const texts = (raw.content ?? []).map((b) => b.text);
+
+    expect(texts).toContain("Article-scoped paragraph.");
+    expect(texts.some((t) => t.includes("Body paragraph"))).toBe(false);
+    await page.close();
+  }, 30_000);
+
+  it("falls back to the whole body when the page has no such landmark", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.tablesAndLists); // no <main>
+    const raw = await extract(page, opts({ kind: "content", landmark: "main" }));
+
+    // Returning nothing because a landmark is absent would be the same silent-omission
+    // failure in a new costume.
+    expect((raw.content ?? []).length).toBeGreaterThan(0);
+    await page.close();
+  }, 30_000);
+});

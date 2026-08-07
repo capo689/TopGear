@@ -21,6 +21,8 @@ export const FIXTURES = {
   pseudoForm: "/forms/pseudo-form.html",
   /** Tables, infobox, spanned cells, multi-value cells, definition list, figcaption. */
   tablesAndLists: "/content/tables-and-lists.html",
+  /** nav/header/main/article/footer, for landmark-scoped content reads. */
+  landmarks: "/content/landmarks.html",
   injection: "/security/injection.html",
   grantEscape: "/security/grant-escape.html",
   // Expected-fail until M5 (full risk classifier + network backstop). See MILESTONE_STATUS.
