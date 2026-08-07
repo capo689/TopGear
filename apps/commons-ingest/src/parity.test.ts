@@ -35,28 +35,41 @@ const unsigned = {
 };
 const valid = { ...unsigned, publicKey: id.publicKey, signature: id.sign(unsigned) };
 
-/** A minimal in-memory Vercel Blob simulator so the PUT + PIPE-02 readback path completes. */
-function withBlobMock<T>(token: boolean, fn: () => Promise<T>): Promise<T> {
-  const prev = process.env.BLOB_READ_WRITE_TOKEN;
-  if (token) process.env.BLOB_READ_WRITE_TOKEN = "test-token";
-  else delete process.env.BLOB_READ_WRITE_TOKEN;
-  const store = new Map<string, string>();
-  const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any, init: any) => {
-    const url = String(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (method === "PUT") {
-      store.set(url, String(init?.body ?? ""));
-      return { ok: true, status: 200, json: async () => ({ url }) } as Response;
+/**
+ * A minimal in-memory Postgres stand-in for the two statements the functions issue, so the
+ * INSERT ... RETURNING (PIPE-02) and DELETE ... rowCount paths execute end to end in the test.
+ * `vi.mock` is hoisted, so the store lives inside the factory and is reached via the mock.
+ */
+vi.mock("pg", () => {
+  const rows: { id: number; install_id: string }[] = [];
+  let seq = 0;
+  class Pool {
+    async query(text: string, params: unknown[] = []): Promise<{ rows: unknown[]; rowCount: number }> {
+      if (/^\s*INSERT INTO browser_bridge\.contributions/i.test(text)) {
+        const row = { id: ++seq, install_id: String(params[0]) };
+        rows.push(row);
+        return { rows: [row], rowCount: 1 };
+      }
+      if (/^\s*DELETE FROM browser_bridge\.contributions/i.test(text)) {
+        const id = String(params[0]);
+        const before = rows.length;
+        for (let i = rows.length - 1; i >= 0; i--) if (rows[i]!.install_id === id) rows.splice(i, 1);
+        return { rows: [], rowCount: before - rows.length };
+      }
+      throw new Error(`unexpected statement: ${text}`);
     }
-    if (method === "POST" && url.endsWith("/delete")) return { ok: true, status: 200, json: async () => ({}) } as Response;
-    if (url.includes("?prefix=")) return { ok: true, status: 200, json: async () => ({ blobs: [] }) } as Response;
-    if (store.has(url)) return { ok: true, status: 200, json: async () => JSON.parse(store.get(url)!) } as Response;
-    return { ok: false, status: 404, json: async () => ({}) } as Response;
-  });
+  }
+  return { Pool, default: { Pool } };
+});
+
+/** Run `fn` with SUPABASE_DB_URL present or absent — the functions' storage-configured switch. */
+function withDb<T>(configured: boolean, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.SUPABASE_DB_URL;
+  if (configured) process.env.SUPABASE_DB_URL = "postgres://browser_bridge_app@test/db";
+  else delete process.env.SUPABASE_DB_URL;
   return fn().finally(() => {
-    spy.mockRestore();
-    if (prev === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
-    else process.env.BLOB_READ_WRITE_TOKEN = prev;
+    if (prev === undefined) delete process.env.SUPABASE_DB_URL;
+    else process.env.SUPABASE_DB_URL = prev;
   });
 }
 
@@ -70,7 +83,7 @@ async function stubStatus(path: string, storage: boolean, body: unknown): Promis
 }
 
 async function vercelStatus(handler: any, token: boolean, body: unknown): Promise<number> {
-  return withBlobMock(token, async () => {
+  return withDb(token, async () => {
     let status = 0;
     const res = { setHeader() {}, status(s: number) { status = s; return this; }, end() {} };
     await handler({ method: "POST", body } as never, res as never);
@@ -84,6 +97,8 @@ const contributionCases: { name: string; token: boolean; body: unknown; expect: 
   { name: "missing publicKey → 400", token: true, body: { ...valid, publicKey: undefined }, expect: 400 },
   { name: "disallowed top-level field → 422", token: true, body: { ...valid, value: "secret" }, expect: 422 },
   { name: "disallowed fingerprint field → 422", token: true, body: { ...valid, fingerprint: { role: "combobox", leaked: "x" } }, expect: 422 },
+  { name: "non-string scalar field (typed store) → 422", token: true, body: { ...valid, kind: 7 }, expect: 422 },
+  { name: "non-string fingerprint value → 422", token: true, body: { ...valid, fingerprint: { role: "combobox", name: 3 } }, expect: 422 },
   { name: "origin with query string → 422", token: true, body: { ...valid, origin: "https://example.com/p?token=1" }, expect: 422 },
   { name: "origin with a path → 422", token: true, body: { ...valid, origin: "https://example.com/account" }, expect: 422 },
   { name: "oversize record → 413", token: true, body: { ...valid, kind: "x".repeat(20000) }, expect: 413 },
@@ -143,7 +158,7 @@ describe("rate-limit parity: stub === function on the 429 path (COST-03)", () =>
       stubStatuses.push(r.status);
     }
 
-    const fnStatuses = await withBlobMock(true, async () => {
+    const fnStatuses = await withDb(true, async () => {
       const out: number[] = [];
       for (let i = 0; i < 61; i++) {
         let status = 0;
@@ -169,7 +184,7 @@ describe("rate-limit parity: crossing a SATURATED IP bucket (COST-03 P1 ordering
     return r.status;
   };
   const fnRaw = (headers: Record<string, string>, body: unknown): Promise<number> =>
-    withBlobMock(true, async () => {
+    withDb(true, async () => {
       let status = 0;
       const res = { setHeader() {}, status(s: number) { status = s; return this; }, end() {} };
       await vercelContributions({ method: "POST", headers, body } as never, res as never);
@@ -184,7 +199,7 @@ describe("rate-limit parity: crossing a SATURATED IP bucket (COST-03 P1 ordering
 
     // Saturate the IP bucket on BOTH (60 accepted requests each).
     for (let i = 0; i < 60; i++) await stubRaw("/contributions", { "x-forwarded-for": IP }, validStr);
-    await withBlobMock(true, async () => {
+    await withDb(true, async () => {
       for (let i = 0; i < 60; i++) {
         const res = { setHeader() {}, status() { return this; }, end() {} };
         await vercelContributions({ method: "POST", headers: { "x-forwarded-for": IP }, body: JSON.parse(validStr) } as never, res as never);

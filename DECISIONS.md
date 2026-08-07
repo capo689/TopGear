@@ -395,3 +395,49 @@ this must be settled before any external release.**
   page-load includes the post-navigation re-capture.
 - **D3 `fieldsAttempted` = matched + unmatched.** The honest denominator for "did the form get
   filled"; matched-only would hide silently skipped fields.
+
+## Commons quarantine: Postgres (Supabase), not Vercel Blob (2026-08-06)
+
+- **Why Postgres over Blob.** Blob is object storage: you can put and get by key, but you
+  cannot QUERY. Aggregation is the entire value of the commons — "which widgetKind appears on
+  which origin, how often" is a SELECT, not a bucket listing. The old purge path had to LIST by
+  prefix and DELETE each object one at a time; it is now one `DELETE ... WHERE install_id = $1`
+  returning the real rowCount. Blob is abandoned outright, with no fallback path: a fallback
+  would mean two storage contracts to keep honest, and the parity discipline already shows how
+  expensive a second copy of a contract is.
+- **Shared-project isolation model.** The database is a SHARED Supabase project ("max"), so the
+  ingest role is the isolation boundary. `browser_bridge_app` has USAGE on schema
+  `browser_bridge` and SELECT/INSERT/DELETE on one table — nothing else. `/api/contributions` is
+  a PUBLIC UNAUTHENTICATED WRITE; if it ever held `service_role` or the postgres superuser, a
+  bug in it would reach that project's payment and API-key tables. Verified: 0 of max's public
+  tables are SELECT-able by this role.
+- **Its one caveat: PUBLIC-inherited privileges on schema `public`.** `browser_bridge_app`
+  inherited EXECUTE on `public.set_compton_gallery_updated_at()` via the PUBLIC pseudo-role.
+  Postgres has no per-role negative grant, so the only removal is `REVOKE ... FROM PUBLIC`;
+  done, blast radius one function — anon/authenticated/service_role keep their EXPLICIT grants,
+  the owner always has EXECUTE, and a trigger's EXECUTE privilege is checked at CREATE TRIGGER
+  time (both triggers still attached). **USAGE on schema `public` is left alone deliberately**:
+  it too is PUBLIC-inherited, and revoking it from PUBLIC would break every other role in max
+  that depends on it. Schema usage without any object privileges grants nothing readable —
+  measured: 0 public functions now executable, 0 public tables selectable.
+- **No UPDATE, ever.** The role has SELECT/INSERT/DELETE and deliberately NOT UPDATE. Records
+  are signed; a mutable signed record is a contradiction. The lifecycle is insert → read back →
+  purge. An UPDATE grant would let a bug silently rewrite a record while its signature still
+  "verified" against the original bytes.
+- **Session pooler, measured not guessed.** `db.<ref>.supabase.co` has NO A record (IPv6 only)
+  and Vercel functions are IPv4, so the direct connection cannot work. Probing both regional
+  poolers with a deliberately bogus password identified the tenant: `aws-0` answers "tenant/user
+  not found", `aws-1` answers with an auth-secret error — so `aws-1-us-west-2.pooler.supabase.com:5432`
+  is this project's session pooler. (The same probe confirmed the role exists with no password set.)
+- **TLS is verified against a pinned Supabase root CA, not disabled.** Measured: the pooler
+  presents a SELF-SIGNED chain, so the system CA store rejects it outright. The role password
+  crosses this connection, so the fix is to pin Supabase's published root CA (a public
+  certificate, safe to commit) rather than set `rejectUnauthorized: false` and accept anything.
+  With the CA pinned the handshake verifies and the connection proceeds to normal auth.
+- **Typed store ⇒ a new 422.** The columns are typed now, so a non-string scalar (or a
+  non-object fingerprint) is rejected at the boundary as `field types` rather than surfacing as
+  a 502 from Postgres. Added to BOTH the function and the stub, with parity cases.
+- **`pg` is a real dependency now.** The "ingest functions are dependency-free" property is
+  gone; `vercel.json`'s installCommand actually installs (`npm install --omit=dev`), and `pg` is
+  the single production dependency. The parity test mocks `pg` in-process rather than requiring
+  a live database in CI.

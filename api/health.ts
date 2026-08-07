@@ -1,7 +1,13 @@
-/** Health/config probe: reports whether durable quarantine storage is wired. */
+/**
+ * Health/config probe: reports whether durable quarantine storage is wired.
+ *
+ * "unconfigured" means exactly one thing — SUPABASE_DB_URL is absent, so POST /api/contributions
+ * will 503 rather than accept a record it cannot durably store (INV-10). It reports only the
+ * PRESENCE of the setting, never any part of the connection string (INV-4).
+ */
 export default function handler(_req: unknown, res: any): void {
   try {
-    const storage = process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "unconfigured";
+    const storage = process.env.SUPABASE_DB_URL ? "supabase-postgres" : "unconfigured";
     res.setHeader("content-type", "application/json");
     res.status(200).end(
       JSON.stringify({

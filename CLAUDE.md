@@ -95,9 +95,12 @@ A change that trades a gate for a turn is rejected, always.
 - **Deploy branch:** `main`. Vercel auto-deploys `main` → production. A milestone lands
   on `main` ONLY after it passes Fable's review — merging to `main` is shipping, so only
   reviewed milestones land there. Build on a milestone branch; merge on review pass.
-- **Secrets never enter the repo (INV-4):** any ingest/deploy credential (Vercel Blob
-  token, signing secret) lives in Vercel environment variables ONLY, never in code,
-  config, or commits.
+- **Secrets never enter the repo (INV-4):** any ingest/deploy credential (the Supabase
+  `SUPABASE_DB_URL`, signing secrets) lives in Vercel environment variables ONLY — never in
+  code, config, commits, or a chat transcript. The ingest connection string MUST use the
+  least-privilege role `browser_bridge_app`, never `service_role` and never the postgres
+  superuser: `/api/contributions` is a public unauthenticated write, so its database identity
+  is the isolation boundary for every other tenant of that Supabase project.
 - **Live acceptance CLIs:** Codex/GPT is an approved, subscription-authenticated host CLI
   for live model-agnostic acceptance alongside Claude Code — still no frontier API keys,
   consistent with INV-11.

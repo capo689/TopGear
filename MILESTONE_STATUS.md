@@ -131,7 +131,7 @@ Fresh `git clone` → `pnpm install --frozen-lockfile` → `pnpm build` → `tur
 ## INV-10 — BLOCKED, not passed (durable storage not provisioned)
 
 `GET /api/health` → **200**, body `{"service":"commons-ingest","release":"R1","storage":"unconfigured",…}`.
-Production is UP; quarantine storage is not wired (`BLOB_READ_WRITE_TOKEN` unset), so
+Production is UP; quarantine storage is not wired (`SUPABASE_DB_URL` unset), so
 `POST /api/contributions` returns 503 by design rather than silently dropping data.
 
 **Production verified green after the merge** (standing law): deployment
@@ -716,7 +716,7 @@ scheduler (global + per-origin governors, grant budgets, backoff) · isolated Pl
 ### Post-review landing (Vercel + parity)
 
 - **Production is live** (`commons-ingest` on Vercel): `/api/health` → 200, `/api/contributions`
-  GET → 405, status page → 200, no SSO. Storage reports `unconfigured` until a Vercel Blob
+  GET → 405, status page → 200, no SSO. Storage reports `unconfigured` until the Postgres
   token is set (honest — 503 rather than silent drops). Vercel Authentication disabled so
   end-user daemons can POST.
 - **Ingest parity test** (`apps/commons-ingest/src/parity.test.ts`): the local stub and the
@@ -876,7 +876,8 @@ not gamed — the next audit measures whether the underlying issues moved.
 
 ### Wave 1 — arm-before-storage — COMPLETE (pending Fable review)
 
-**Gate: these had to land before `BLOB_READ_WRITE_TOKEN` is ever set.** Creating the Blob
+**Gate: these had to land before durable storage is ever wired.** (Historical: this wave predates
+the move off Vercel Blob; the storage engine is now Supabase Postgres.) Creating the
 store before this wave would have converted two dormant paper findings into a live,
 unauthenticated, forgeable public write-and-delete endpoint. **The Blob store was NOT
 created; provisioning it stays gated on this wave passing review.**
@@ -906,7 +907,7 @@ LIVE model re-measure remains Ace's to run (this session can't drive a live mode
 structural argument is that no execution-path file changed.
 
 **Honest boundary:** the PIPE-02 readback is proven against an in-memory Blob simulator in
-parity.test; the live Vercel Blob PUT/GET response shape is verified when the store is
+parity.test; the live storage round trip is verified when the store is
 provisioned in Wave 3. If the live shape differs, the readback fails closed (502 → retry),
 which is the safe direction.
 

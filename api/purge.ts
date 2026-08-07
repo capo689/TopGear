@@ -7,8 +7,14 @@
  * from that key is purged — anyone who merely learns an installId can no longer wipe it.
  * The ed25519 verification is inlined byte-identically to
  * packages/contribution/src/verify.ts; parity.test.ts is the drift guard.
+ *
+ * STORAGE: Postgres (Supabase). The Blob list-by-prefix + delete-each loop collapses to one
+ * DELETE, and the count returned is the REAL number of rows removed (rowCount), never an
+ * assumed one. The connection uses the least-privilege role `browser_bridge_app` — never
+ * service_role, never the postgres superuser.
  */
 import { createHash, createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { Pool } from "pg";
 
 // --- inlined from @browser-bridge/contribution (identity.ts + verify.ts) — keep identical ---
 function sortKeys(obj: unknown): unknown {
@@ -107,6 +113,52 @@ function tooMany(res: any, retryAfter: number): void {
 const ipLimiter = createRateLimiter(); // bucket 1: trusted IP, before verify
 const idLimiter = createRateLimiter(); // bucket 2: verified installId, after verify
 
+/** One pool per warm instance; ssl explicit + CA-pinned because the password crosses this wire. */
+/**
+ * Supabase's PUBLIC root CA (not a secret — it is a published certificate).
+ *
+ * MEASURED, not assumed: the Supavisor pooler presents a SELF-SIGNED chain, so verifying
+ * against the system CA store fails outright ("self-signed certificate in certificate chain").
+ * The role password crosses this connection, so the answer is to pin Supabase's root rather
+ * than to set rejectUnauthorized:false and accept any certificate. With this CA the handshake
+ * verifies and the connection proceeds to normal Postgres auth.
+ */
+const SUPABASE_ROOT_CA = `-----BEGIN CERTIFICATE-----
+MIIDxDCCAqygAwIBAgIUbLxMod62P2ktCiAkxnKJwtE9VPYwDQYJKoZIhvcNAQEL
+BQAwazELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5l
+dyBDYXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJh
+c2UgUm9vdCAyMDIxIENBMB4XDTIxMDQyODEwNTY1M1oXDTMxMDQyNjEwNTY1M1ow
+azELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5ldyBD
+YXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJhc2Ug
+Um9vdCAyMDIxIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqQXW
+QyHOB+qR2GJobCq/CBmQ40G0oDmCC3mzVnn8sv4XNeWtE5XcEL0uVih7Jo4Dkx1Q
+DmGHBH1zDfgs2qXiLb6xpw/CKQPypZW1JssOTMIfQppNQ87K75Ya0p25Y3ePS2t2
+GtvHxNjUV6kjOZjEn2yWEcBdpOVCUYBVFBNMB4YBHkNRDa/+S4uywAoaTWnCJLUi
+cvTlHmMw6xSQQn1UfRQHk50DMCEJ7Cy1RxrZJrkXXRP3LqQL2ijJ6F4yMfh+Gyb4
+O4XajoVj/+R4GwywKYrrS8PrSNtwxr5StlQO8zIQUSMiq26wM8mgELFlS/32Uclt
+NaQ1xBRizkzpZct9DwIDAQABo2AwXjALBgNVHQ8EBAMCAQYwHQYDVR0OBBYEFKjX
+uXY32CztkhImng4yJNUtaUYsMB8GA1UdIwQYMBaAFKjXuXY32CztkhImng4yJNUt
+aUYsMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAB8spzNn+4VU
+tVxbdMaX+39Z50sc7uATmus16jmmHjhIHz+l/9GlJ5KqAMOx26mPZgfzG7oneL2b
+VW+WgYUkTT3XEPFWnTp2RJwQao8/tYPXWEJDc0WVQHrpmnWOFKU/d3MqBgBm5y+6
+jB81TU/RG2rVerPDWP+1MMcNNy0491CTL5XQZ7JfDJJ9CCmXSdtTl4uUQnSuv/Qx
+Cea13BX2ZgJc7Au30vihLhub52De4P/4gonKsNHYdbWjg7OWKwNv/zitGDVDB9Y2
+CMTyZKG3XEu5Ghl1LEnI3QmEKsqaCLv12BnVjbkSeZsMnevJPs1Ye6TjjJwdik5P
+o/bKiIz+Fq8=
+-----END CERTIFICATE-----`;
+
+let pool: Pool | undefined;
+function getPool(connectionString: string): Pool {
+  pool ??= new Pool({
+    connectionString,
+    ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true },
+    max: 4,
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000,
+  });
+  return pool;
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
   try {
     return await handle(req, res);
@@ -146,27 +198,21 @@ async function handle(req: any, res: any): Promise<void> {
   const idRetry = idLimiter(installId);
   if (idRetry) return tooMany(res, idRetry);
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) return json(res, 503, { error: "quarantine storage not configured" });
+  const dbUrl = process.env.SUPABASE_DB_URL;
+  if (!dbUrl) return json(res, 503, { error: "quarantine storage not configured" });
 
-  const listed = await fetch(
-    `https://blob.vercel-storage.com/?prefix=${encodeURIComponent(`quarantine/${installId}/`)}&limit=1000`,
-    { headers: { authorization: `Bearer ${token}`, "x-api-version": "7" } },
-  );
-  if (!listed.ok) {
-    reportError("purge", new Error("quarantine list failed"), { status: listed.status });
-    return json(res, 502, { error: "quarantine list failed", status: listed.status });
-  }
-  const { blobs = [] } = (await listed.json()) as { blobs?: { url: string }[] };
-
-  let purged = 0;
-  for (const b of blobs) {
-    const del = await fetch("https://blob.vercel-storage.com/delete", {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-api-version": "7" },
-      body: JSON.stringify({ urls: [b.url] }),
-    });
-    if (del.ok) purged += 1;
+  // AUTHZ-02: purge ONLY the installId derived from the proof's key — parameterized, so a
+  // caller can never widen the predicate. The count is what the database actually deleted.
+  let purged: number;
+  try {
+    const result = await getPool(dbUrl).query(
+      `DELETE FROM browser_bridge.contributions WHERE install_id = $1`,
+      [installId],
+    );
+    purged = result.rowCount ?? 0;
+  } catch (err) {
+    reportError("purge", err, { phase: "delete" });
+    return json(res, 502, { error: "quarantine purge failed" });
   }
   return json(res, 200, { purged });
 }

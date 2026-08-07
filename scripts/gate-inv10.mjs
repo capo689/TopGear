@@ -8,9 +8,9 @@
  *   1. mint a FRESH install identity (used once, so anything found under it is ours)
  *   2. build ONE real Class C record — structure of a PUBLIC origin, no values, no query
  *      string, day-granular (INV-6) — sign it, POST it
- *   3. POST a signed purge proof for the SAME install. The endpoint LISTS that install's
- *      quarantined objects and returns how many it removed. `purged === 1` is the readback:
- *      the record was there, durably, under the installId derived from our key.
+ *   3. POST a signed purge proof for the SAME install. The endpoint issues one DELETE scoped to
+ *      that installId and returns the real rowCount. `purged === 1` is the readback: the row
+ *      was there, durably, under the installId derived from our key.
  *   4. purge again → `purged === 0`, confirming step 3 actually deleted rather than reported.
  *
  * Step 3/4 also exercise the kill switch on real infrastructure, and leave the commons clean:
@@ -47,8 +47,11 @@ console.log(`\nINV-10 against ${BASE}\n`);
 
 const health = await fetch(`${BASE}/api/health`).then((r) => r.json());
 console.log(`health: ${JSON.stringify(health)}\n`);
+if (health.storage && health.storage !== "unconfigured" && health.storage !== "supabase-postgres") {
+  console.log(`NOTE: unexpected storage backend "${health.storage}" — this gate expects supabase-postgres.`);
+}
 if (health.storage === "unconfigured") {
-  console.log("BLOCKED — durable quarantine storage is not provisioned (BLOB_READ_WRITE_TOKEN unset).");
+  console.log("BLOCKED — durable quarantine storage is not provisioned (SUPABASE_DB_URL unset).");
   console.log("The endpoint returns 503 by design rather than silently dropping data, so INV-10");
   console.log("CANNOT be verified yet. This is an honest blocked, not a pass.\n");
   process.exit(2);

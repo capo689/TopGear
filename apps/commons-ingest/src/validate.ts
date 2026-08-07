@@ -5,6 +5,10 @@
  * codes are duplicated there rather than imported; `parity.test.ts` is the drift guard.
  * The ed25519 verification itself is imported from @browser-bridge/contribution here (so
  * client and stub agree by construction) and inlined byte-identically in the Vercel copy.
+ *
+ * STORAGE CONTRACT: `storageConfigured` mirrors the presence of SUPABASE_DB_URL in the
+ * functions (Postgres, table browser_bridge.contributions). The stub keeps its records in
+ * memory — it mirrors the CONTRACT (status codes, ordering, real purge counts), not the engine.
  */
 import { verifyContributionSignature, verifyPurgeProof } from "@browser-bridge/contribution";
 
@@ -18,6 +22,24 @@ export interface ValidationResult {
 export const MAX_BYTES = 16 * 1024;
 const ALLOWED = new Set(["origin", "kind", "widgetKind", "fingerprint", "day", "installId", "publicKey", "signature"]);
 const ALLOWED_FP = new Set(["role", "name", "testId", "autocomplete", "inputType"]);
+
+/**
+ * Type check the allowlisted fields. The store is a TYPED table now, so a non-string scalar
+ * (or a non-object fingerprint) is rejected at the boundary rather than surfacing as a 502
+ * from Postgres. Inlined identically in api/contributions.ts; parity.test.ts guards the pair.
+ */
+const SCALARS = ["origin", "kind", "widgetKind", "day", "installId", "publicKey", "signature"];
+export function badlyTypedFields(rec: Record<string, unknown>): string[] {
+  const bad = SCALARS.filter((k) => rec[k] !== undefined && typeof rec[k] !== "string");
+  const fp = rec.fingerprint;
+  if (fp !== undefined) {
+    if (typeof fp !== "object" || fp === null || Array.isArray(fp)) bad.push("fingerprint");
+    else for (const [k, v] of Object.entries(fp as Record<string, unknown>)) {
+      if (typeof v !== "string") bad.push(`fingerprint.${k}`);
+    }
+  }
+  return bad;
+}
 
 export function validateContribution(
   rawLength: number,
@@ -35,6 +57,8 @@ export function validateContribution(
     const bad = Object.keys(rec.fingerprint as object).filter((k) => !ALLOWED_FP.has(k));
     if (bad.length) return { status: 422, body: { error: "disallowed fingerprint fields", fields: bad } };
   }
+  const mistyped = badlyTypedFields(rec);
+  if (mistyped.length) return { status: 422, body: { error: "field types", fields: mistyped } };
   if (typeof rec.origin === "string" && (rec.origin.includes("?") || rec.origin.split("/").length > 3)) {
     return { status: 422, body: { error: "origin must be scheme://host only" } };
   }

@@ -2,13 +2,21 @@
  * POST /api/contributions — accept ONE signed Class C record into quarantine.
  *
  * Mirrors the local stub's contract exactly (apps/commons-ingest/src/validate.ts) so the
- * client is unchanged. Vercel functions must be dependency-free, so the validation order,
- * status codes, and the ed25519 verification are inlined here BYTE-IDENTICALLY to
- * packages/contribution/src/verify.ts; `apps/commons-ingest/src/parity.test.ts` is the
- * drift guard. Durable storage is Vercel Blob; with no token this returns 503 rather than
- * silently dropping data.
+ * client is unchanged. The validation order, status codes, and the ed25519 verification are
+ * inlined here BYTE-IDENTICALLY to packages/contribution/src/verify.ts;
+ * `apps/commons-ingest/src/parity.test.ts` is the drift guard.
+ *
+ * STORAGE: Postgres (Supabase), table `browser_bridge.contributions`. Object storage was
+ * abandoned — you cannot query a bucket, and aggregation IS the commons. With no
+ * SUPABASE_DB_URL this returns 503 rather than silently dropping data (INV-10).
+ *
+ * The connection MUST use the least-privilege role `browser_bridge_app` (select/insert/delete
+ * on that one table, no UPDATE, no access to any other schema) — never service_role and never
+ * the postgres superuser. This endpoint is a PUBLIC UNAUTHENTICATED WRITE, so its database
+ * identity is the isolation boundary for every other tenant of the project.
  */
 import { createHash, createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { Pool } from "pg";
 
 const MAX_BYTES = 16 * 1024;
 
@@ -57,6 +65,25 @@ function verifyContributionSignature(rec: Record<string, unknown>): { ok: true; 
   return { ok: true, installId: derived };
 }
 // --- end inlined ---
+
+/**
+ * Type check the allowlisted fields. The store is now a TYPED table, not an opaque blob, so a
+ * non-string scalar (or a non-object fingerprint) has to be rejected at the boundary rather
+ * than discovered as a 502 from Postgres. Same check, same status, in the stub — parity guards
+ * the pair.
+ */
+const SCALARS = ["origin", "kind", "widgetKind", "day", "installId", "publicKey", "signature"];
+function badlyTypedFields(rec: Record<string, unknown>): string[] {
+  const bad = SCALARS.filter((k) => rec[k] !== undefined && typeof rec[k] !== "string");
+  const fp = rec.fingerprint;
+  if (fp !== undefined) {
+    if (typeof fp !== "object" || fp === null || Array.isArray(fp)) bad.push("fingerprint");
+    else for (const [k, v] of Object.entries(fp as Record<string, unknown>)) {
+      if (typeof v !== "string") bad.push(`fingerprint.${k}`);
+    }
+  }
+  return bad;
+}
 
 function json(res: any, status: number, body: unknown): void {
   res.setHeader("content-type", "application/json");
@@ -117,6 +144,57 @@ function tooMany(res: any, retryAfter: number): void {
 const ipLimiter = createRateLimiter(); // bucket 1: trusted IP, before verify (DoS bound)
 const idLimiter = createRateLimiter(); // bucket 2: verified installId, after verify
 
+/**
+ * One pool per warm instance. `ssl` is set EXPLICITLY rather than left to the URL's sslmode:
+ * the role password crosses this connection, so the server certificate is VERIFIED against
+ * Supabase's pinned root above. Do not put sslmode in SUPABASE_DB_URL — the explicit option
+ * here wins and this stays deterministic.
+ */
+/**
+ * Supabase's PUBLIC root CA (not a secret — it is a published certificate).
+ *
+ * MEASURED, not assumed: the Supavisor pooler presents a SELF-SIGNED chain, so verifying
+ * against the system CA store fails outright ("self-signed certificate in certificate chain").
+ * The role password crosses this connection, so the answer is to pin Supabase's root rather
+ * than to set rejectUnauthorized:false and accept any certificate. With this CA the handshake
+ * verifies and the connection proceeds to normal Postgres auth.
+ */
+const SUPABASE_ROOT_CA = `-----BEGIN CERTIFICATE-----
+MIIDxDCCAqygAwIBAgIUbLxMod62P2ktCiAkxnKJwtE9VPYwDQYJKoZIhvcNAQEL
+BQAwazELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5l
+dyBDYXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJh
+c2UgUm9vdCAyMDIxIENBMB4XDTIxMDQyODEwNTY1M1oXDTMxMDQyNjEwNTY1M1ow
+azELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0RlbHdhcmUxEzARBgNVBAcMCk5ldyBD
+YXN0bGUxFTATBgNVBAoMDFN1cGFiYXNlIEluYzEeMBwGA1UEAwwVU3VwYWJhc2Ug
+Um9vdCAyMDIxIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqQXW
+QyHOB+qR2GJobCq/CBmQ40G0oDmCC3mzVnn8sv4XNeWtE5XcEL0uVih7Jo4Dkx1Q
+DmGHBH1zDfgs2qXiLb6xpw/CKQPypZW1JssOTMIfQppNQ87K75Ya0p25Y3ePS2t2
+GtvHxNjUV6kjOZjEn2yWEcBdpOVCUYBVFBNMB4YBHkNRDa/+S4uywAoaTWnCJLUi
+cvTlHmMw6xSQQn1UfRQHk50DMCEJ7Cy1RxrZJrkXXRP3LqQL2ijJ6F4yMfh+Gyb4
+O4XajoVj/+R4GwywKYrrS8PrSNtwxr5StlQO8zIQUSMiq26wM8mgELFlS/32Uclt
+NaQ1xBRizkzpZct9DwIDAQABo2AwXjALBgNVHQ8EBAMCAQYwHQYDVR0OBBYEFKjX
+uXY32CztkhImng4yJNUtaUYsMB8GA1UdIwQYMBaAFKjXuXY32CztkhImng4yJNUt
+aUYsMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAB8spzNn+4VU
+tVxbdMaX+39Z50sc7uATmus16jmmHjhIHz+l/9GlJ5KqAMOx26mPZgfzG7oneL2b
+VW+WgYUkTT3XEPFWnTp2RJwQao8/tYPXWEJDc0WVQHrpmnWOFKU/d3MqBgBm5y+6
+jB81TU/RG2rVerPDWP+1MMcNNy0491CTL5XQZ7JfDJJ9CCmXSdtTl4uUQnSuv/Qx
+Cea13BX2ZgJc7Au30vihLhub52De4P/4gonKsNHYdbWjg7OWKwNv/zitGDVDB9Y2
+CMTyZKG3XEu5Ghl1LEnI3QmEKsqaCLv12BnVjbkSeZsMnevJPs1Ye6TjjJwdik5P
+o/bKiIz+Fq8=
+-----END CERTIFICATE-----`;
+
+let pool: Pool | undefined;
+function getPool(connectionString: string): Pool {
+  pool ??= new Pool({
+    connectionString,
+    ssl: { ca: SUPABASE_ROOT_CA, rejectUnauthorized: true },
+    max: 4, // Fluid reuses an instance across concurrent requests; a max of 1 would serialize
+    connectionTimeoutMillis: 5_000, // the function's maxDuration is 10s
+    idleTimeoutMillis: 10_000,
+  });
+  return pool;
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
   try {
     return await handle(req, res);
@@ -158,6 +236,8 @@ async function handle(req: any, res: any): Promise<void> {
     const bad = Object.keys(rec.fingerprint as object).filter((k) => !ALLOWED_FP.has(k));
     if (bad.length) return json(res, 422, { error: "disallowed fingerprint fields", fields: bad });
   }
+  const mistyped = badlyTypedFields(rec);
+  if (mistyped.length) return json(res, 422, { error: "field types", fields: mistyped });
   if (typeof rec.origin === "string" && (rec.origin.includes("?") || rec.origin.split("/").length > 3)) {
     return json(res, 422, { error: "origin must be scheme://host only" });
   }
@@ -173,48 +253,47 @@ async function handle(req: any, res: any): Promise<void> {
   const idRetry = idLimiter(installId);
   if (idRetry) return tooMany(res, idRetry);
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
+  const dbUrl = process.env.SUPABASE_DB_URL;
+  if (!dbUrl) {
     return json(res, 503, {
       error: "quarantine storage not configured",
-      detail: "set BLOB_READ_WRITE_TOKEN; records are never accepted without durable storage",
+      detail: "set SUPABASE_DB_URL; records are never accepted without durable storage",
     });
   }
 
-  // Store under the DERIVED installId, never the body's claim.
-  const key = `quarantine/${installId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.json`;
-  const put = await fetch(`https://blob.vercel-storage.com/${key}`, {
-    method: "PUT",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "x-content-type": "application/json",
-      "x-api-version": "7",
-      "x-add-random-suffix": "0",
-    },
-    body: JSON.stringify(rec),
-  });
-  if (!put.ok) {
-    reportError("contributions", new Error("quarantine write failed"), { status: put.status });
-    return json(res, 502, { error: "quarantine write failed", status: put.status });
-  }
-
-  // PIPE-02: do not trust put.ok. Read the object back and confirm it actually persisted
-  // with the expected owner, rather than assuming a 200 means durable success.
+  // PIPE-02: do not trust the write. INSERT ... RETURNING gives the row the database actually
+  // committed, so the readback is the same statement rather than a second round trip — and the
+  // stored owner is asserted against the DERIVED installId, never the body's claim.
+  let stored: { id: string; install_id: string } | undefined;
   try {
-    const putBody = (await put.json()) as { url?: string; downloadUrl?: string };
-    const readUrl = putBody.downloadUrl || putBody.url;
-    if (!readUrl) return json(res, 502, { error: "quarantine write unverifiable", detail: "no object url returned" });
-    const check = await fetch(readUrl, { headers: { "x-api-version": "7" } });
-    if (!check.ok) return json(res, 502, { error: "quarantine readback failed", status: check.status });
-    const stored = (await check.json()) as { installId?: string };
-    if (!stored || stored.installId !== installId) {
-      reportError("contributions", new Error("quarantine verification mismatch"));
-      return json(res, 502, { error: "quarantine verification mismatch" });
-    }
+    const result = await getPool(dbUrl).query(
+      `INSERT INTO browser_bridge.contributions
+         (install_id, origin, kind, widget_kind, fingerprint, day, public_key, signature)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+       RETURNING id, install_id`,
+      [
+        installId, // DERIVED from the verified key
+        rec.origin as string,
+        (rec.kind as string) ?? null,
+        (rec.widgetKind as string) ?? null,
+        rec.fingerprint === undefined ? null : JSON.stringify(rec.fingerprint),
+        (rec.day as string) ?? null,
+        rec.publicKey as string,
+        rec.signature as string,
+      ],
+    );
+    stored = result.rows[0] as { id: string; install_id: string } | undefined;
   } catch (err) {
-    reportError("contributions", err, { phase: "readback" });
-    return json(res, 502, { error: "quarantine readback failed" });
+    reportError("contributions", err, { phase: "insert" });
+    return json(res, 502, { error: "quarantine write failed" });
+  }
+  if (!stored) {
+    reportError("contributions", new Error("insert returned no row"));
+    return json(res, 502, { error: "quarantine write unverifiable" });
+  }
+  if (stored.install_id !== installId) {
+    reportError("contributions", new Error("quarantine verification mismatch"));
+    return json(res, 502, { error: "quarantine verification mismatch" });
   }
 
   return json(res, 202, { accepted: true });
