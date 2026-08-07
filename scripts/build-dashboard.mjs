@@ -160,9 +160,12 @@ and two of them hit live third-party pages and real production storage.</p>
 </div>
 
 <div class="card"><h2>Tests per package</h2>
-<p>Every workspace package with a suite. Grey bars are packages with a test script but no test files — a coverage
-gap, recorded rather than hidden. <span class="mono">backend</span> is interface-only; <span class="mono">extension</span>
-and <span class="mono">shim</span> are the browser-side half of the product and are the real gap.</p>
+<p>Every workspace package, including any with no tests — omitting those would read as "not a gap", which is the
+same silent omission this branch exists to fix. Grey bars are packages with zero tests.
+${gaps.length ? `Currently ${gaps.map((g) => `<span class="mono">${esc(g.short)}</span>`).join(", ")} — ` : "None — "}
+<span class="mono">backend</span> is an interface declaration with no runtime behaviour to test.
+<span class="mono">shim</span> and <span class="mono">extension</span>, the browser-side half of the product, had
+no tests at all until this branch; they now carry the relay's trust-boundary coverage.</p>
 <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>tests passing</span>
 <span><span class="sw" style="background:var(--muted)"></span>no test files</span></div>
 ${barsH(pkgRows, "var(--s1)")}</div>
