@@ -36,6 +36,20 @@ async function main(): Promise<void> {
   }
 
   const daemon = new Daemon({ backend, harvestBackend });
+
+  // INV-9: without this channel a high-risk action can be blocked but never approved by
+  // anyone, which makes the invariant true only because the path is unreachable. Loopback
+  // only, token-gated, ephemeral port. Failure to bind is reported, never swallowed --
+  // running without an approval path is a fact the operator needs to know.
+  try {
+    const { url } = await daemon.startConfirmChannel();
+    process.stderr.write(`browser-bridge: confirm channel on ${url} (loopback, token-gated)\n`);
+  } catch (err) {
+    process.stderr.write(
+      `browser-bridge: confirm channel FAILED to start (${String(err)}). High-risk actions cannot be approved in this session.\n`,
+    );
+  }
+
   const server = createMcpServer(daemon);
   await server.connect(new StdioServerTransport());
 }

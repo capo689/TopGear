@@ -4,4 +4,5 @@
  * All safety policy lives here (INV-5); no model is trusted.
  */
 export * from "./daemon.js";
+export { startConfirmServer, type ConfirmServerDeps, type ConfirmServerHandle } from "./confirm-server.js";
 export { EvalTelemetry, telemetryStatusMessage, type EvalEvent, type EvalRecordInput } from "./eval-telemetry.js";

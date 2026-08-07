@@ -105,6 +105,36 @@ export class CapabilityStore {
     return this.store.get(capabilityId)?.consumed ?? false;
   }
 
+  /**
+   * Every capability awaiting human approval, newest last. Without this a blocked action
+   * minted a pending capability that nothing could enumerate, so nothing could ever be
+   * put in front of a human to approve — INV-9's approval path existed in code and was
+   * unreachable in practice. Expired and consumed entries are never listed: a human must
+   * not be shown something they cannot meaningfully approve.
+   */
+  listPending(): ConfirmationCapability[] {
+    const now = this.clock.now();
+    const out: ConfirmationCapability[] = [];
+    for (const entry of this.store.values()) {
+      if (entry.approved || entry.consumed || now > entry.expiresAtMs) continue;
+      out.push(entry.capability);
+    }
+    return out;
+  }
+
+  /**
+   * Refuse a pending capability outright. Denial must be as available as approval: a UI
+   * that can only say yes is not a consent mechanism. Burns the capability so the same
+   * one can never later be approved.
+   */
+  deny(capabilityId: string): boolean {
+    const entry = this.store.get(capabilityId);
+    if (!entry || entry.consumed) return false;
+    entry.consumed = true;
+    entry.approved = false;
+    return true;
+  }
+
   /** Drop expired entries; returns the count removed. */
   sweep(): number {
     const now = this.clock.now();

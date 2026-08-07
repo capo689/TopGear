@@ -28,6 +28,11 @@ const fake: DaemonLike = {
   fillRecord: async () => ({ matched: [{ field: "email", target: "Email", confidence: 0.9 }], unmatched: [], ambiguities: [], batch: okResult }),
   runPattern: async () => ({ requested: 2, harvested: 2, deduped: 0, skipped: [], exceptions: [] }),
   harvest: () => ({ count: 1, records: [{ url: "https://x/1", title: "A", text: "hi", harvestedAt: 1 }] }),
+  listPendingConfirmations: (sessionId: string) => ({
+    pending: [{ capabilityId: "cap-1", summary: "Delete the account", origin: "https://example.com", sessionId }],
+    approvalUrl: "http://127.0.0.1:5555/pending?sessionId=s&token=t",
+    hint: "A person must open this URL and approve or deny. You cannot approve on their behalf.",
+  }),
   screenshot: async () => ({ bytesBase64: "AAAA", contentType: "image/png" }),
 };
 
@@ -70,8 +75,18 @@ describe("handlers dispatch to the daemon", () => {
     expect(r.batch.status).toBe("completed");
   });
 
-  it("bridge_confirm only nudges the UI; it authors nothing", () => {
-    expect(handleConfirm()).toEqual({ surfaced: true });
+  it("bridge_confirm surfaces what the DAEMON built, and authors nothing itself", () => {
+    // It used to return a bare {surfaced:true} while surfacing nothing at all — the model
+    // reported a step to the user that had not happened. It must now pass through the
+    // daemon's own pending list and say plainly that the model cannot approve.
+    const r = handleConfirm(fake, { sessionId: "s" });
+
+    expect(r.pending).toHaveLength(1);
+    expect(r.pending[0]).toMatchObject({ capabilityId: "cap-1", summary: "Delete the account" });
+    expect(r.approvalUrl).toContain("127.0.0.1");
+    expect(r.hint).toContain("cannot approve on their behalf");
+    // Nothing in the returned payload originates in this handler.
+    expect(JSON.stringify(r)).toBe(JSON.stringify(fake.listPendingConfirmations("s")));
   });
 });
 

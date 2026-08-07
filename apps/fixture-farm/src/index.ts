@@ -23,6 +23,8 @@ export const FIXTURES = {
   tablesAndLists: "/content/tables-and-lists.html",
   /** nav/header/main/article/footer, for landmark-scoped content reads. */
   landmarks: "/content/landmarks.html",
+  /** A button whose label carries high intent — classifies high, must require approval. */
+  highRiskAction: "/security/high-risk-action.html",
   injection: "/security/injection.html",
   grantEscape: "/security/grant-escape.html",
   // Expected-fail until M5 (full risk classifier + network backstop). See MILESTONE_STATUS.

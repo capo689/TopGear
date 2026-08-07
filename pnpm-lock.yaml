@@ -62,6 +62,9 @@ importers:
 
   apps/inspector-ui:
     dependencies:
+      '@browser-bridge/policy':
+        specifier: workspace:*
+        version: link:../../packages/policy
       '@browser-bridge/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

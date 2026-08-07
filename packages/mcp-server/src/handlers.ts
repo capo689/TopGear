@@ -15,6 +15,11 @@ export interface DaemonLike {
   runPattern(sessionId: string, req: RunPatternRequest): Promise<RunPatternResult>;
   harvest(sessionId: string, req: HarvestRequest): HarvestResult;
   screenshot(sessionId: string, roi: ScreenshotRoi): Promise<ScreenshotResult>;
+  listPendingConfirmations(sessionId: string): {
+    pending: unknown[];
+    approvalUrl?: string;
+    hint: string;
+  };
 }
 
 export function handleAttach(daemon: DaemonLike, input: AttachInput): Promise<AttachResult> {
@@ -56,10 +61,19 @@ export function handleScreenshot(daemon: DaemonLike, input: ScreenshotInput): Pr
 }
 
 /**
- * bridge_confirm only REQUESTS that the confirm UI surface a pending, daemon-built
- * confirmation. It cannot describe or create one (INV-9). The capability id already
- * travels to the model in the interrupted BatchResult; approval happens in the UI.
+ * bridge_confirm SURFACES pending, daemon-built confirmations. It cannot describe or
+ * create one (INV-9): every string it returns comes from `describeConfirmation` in the
+ * policy package, beside the store that minted the capability.
+ *
+ * This used to return a bare `{ surfaced: true }` while surfacing nothing, which made the
+ * model report a step to the user that had not happened -- the same shape of dishonesty as
+ * a read that returns success with the data missing. It now returns what is actually
+ * pending plus the loopback URL a human must open, and says plainly that the model cannot
+ * approve on their behalf.
  */
-export function handleConfirm(): { surfaced: true } {
-  return { surfaced: true };
+export function handleConfirm(
+  daemon: DaemonLike,
+  input: { sessionId: string },
+): { pending: unknown[]; approvalUrl?: string; hint: string } {
+  return daemon.listPendingConfirmations(input.sessionId);
 }

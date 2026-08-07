@@ -7,6 +7,7 @@ export * from "./clock.js";
 export * from "./nonce.js";
 export * from "./risk.js";
 export * from "./capability.js";
+export * from "./describe.js";
 export * from "./normalize.js";
 export * from "./grant.js";
 export * from "./reflex.js";

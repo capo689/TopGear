@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SCHEMA_VERSION } from "@browser-bridge/protocol";
 import { AttachShape, ViewShape, ActShape, FillRecordShape, RunPatternShape, HarvestShape, ScreenshotShape, ConfirmShape } from "./schemas.js";
-import type { AttachInput, ViewInput, ActInput, FillRecordInput, RunPatternInput, HarvestInput, ScreenshotInput } from "./schemas.js";
+import type { AttachInput, ViewInput, ActInput, FillRecordInput, RunPatternInput, HarvestInput, ScreenshotInput, ConfirmInput } from "./schemas.js";
 import { handleAttach, handleView, handleAct, handleFillRecord, handleRunPattern, handleHarvest, handleScreenshot, handleConfirm, type DaemonLike } from "./handlers.js";
 
 function jsonContent(obj: unknown) {
@@ -53,8 +53,8 @@ export function createMcpServer(daemon: DaemonLike): McpServer {
   );
   server.registerTool(
     "bridge_confirm",
-    { description: "Request the confirm UI surface a pending, daemon-built confirmation. Cannot describe or create one.", inputSchema: ConfirmShape as never },
-    (async () => jsonContent(handleConfirm())) as never,
+    { description: "Surface the confirmations awaiting human approval, with the URL a person must open. Cannot describe, create, or approve one.", inputSchema: ConfirmShape as never },
+    (async (input: ConfirmInput) => jsonContent(handleConfirm(daemon, input))) as never,
   );
 
   return server;

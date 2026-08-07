@@ -1,32 +1,16 @@
 import type { ConfirmationCapability } from "@browser-bridge/protocol";
 
 /**
- * The confirm UI's display model. CRITICAL (INV-9): every field here comes from the
- * DAEMON-built ConfirmationCapability — the normalized summary, the origin, the
- * destination, the sensitive fields. The model's words are never rendered. The user
- * approves what the daemon describes, not what the model claims.
+ * The confirm UI is a RENDERER. It has nothing of its own to say about a blocked action.
+ *
+ * `describeConfirmation` and `ConfirmationDisplay` used to live here, which meant INV-9's
+ * "the dialog shows the daemon's words, never the model's" held only by convention — a
+ * UI that formats its own summary can drift from what was actually authorized, and the
+ * drift is invisible until it matters. They now live in `@browser-bridge/policy`, beside
+ * the store that mints the capability, and are re-exported here so the placement is a
+ * fact about the code rather than a rule someone has to remember.
  */
-export interface ConfirmationDisplay {
-  title: string;
-  summary: string;
-  origin: string;
-  destination?: string;
-  sensitiveFields: string[];
-  expiresAt: string;
-  capabilityId: string;
-}
-
-export function describeConfirmation(cap: ConfirmationCapability): ConfirmationDisplay {
-  return {
-    title: "Confirm a high-risk action",
-    summary: cap.action.summary,
-    origin: cap.origin,
-    ...(cap.action.formAction ? { destination: cap.action.formAction } : {}),
-    sensitiveFields: cap.sensitiveFields,
-    expiresAt: cap.expiresAt,
-    capabilityId: cap.capabilityId,
-  };
-}
+export { describeConfirmation, type ConfirmationDisplay } from "@browser-bridge/policy";
 
 export interface ConfirmCallbacks {
   /** Approve → the daemon mints/approves the capability. Only the UI can call this. */

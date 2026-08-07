@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { startConfirmServer, type ConfirmServerHandle } from "./confirm-server.js";
 import {
   SCHEMA_VERSION,
   type TaskGrant,
@@ -16,7 +17,7 @@ import {
   type HarvestResult,
   type HarvestRecordDTO,
 } from "@browser-bridge/protocol";
-import { CapabilityStore, systemClock, type Clock } from "@browser-bridge/policy";
+import { CapabilityStore, systemClock, describeConfirmation, type Clock, type ConfirmationDisplay } from "@browser-bridge/policy";
 import { AuditLogger, stdoutSink, type AuditSink } from "@browser-bridge/audit";
 import { InMemorySecretBroker } from "@browser-bridge/secrets";
 import { Session, BatchCapError } from "@browser-bridge/execution";
@@ -84,6 +85,8 @@ export class Daemon {
   private readonly evalSink = EvalTelemetry.fromEnv(); // live-tier recorder; off unless BB_EVAL_LOG set
   private evalRunSeq = 0; // each attach starts a new run; per-session run identity below
   private readonly evalRuns = new Map<string, { runIndex: number; targetUrl: string }>();
+  /** The out-of-band approval channel (INV-9). Undefined until startConfirmChannel(). */
+  private confirmServer: ConfirmServerHandle | undefined;
 
   constructor(private readonly opts: DaemonOptions) {
     this.clock = opts.clock ?? systemClock;
@@ -258,15 +261,62 @@ export class Daemon {
    * `bridge_confirm`: surface pending confirmations to the confirm UI. It cannot
    * describe or create a confirmation — only request the UI show what the daemon built.
    */
-  listPendingConfirmations(_sessionId: string): Record<string, never> {
-    // The confirm UI reads pending capabilities from its own channel in M1; this hook
-    // exists so the model tool can request a surface without authoring anything.
-    return {};
+  listPendingConfirmations(sessionId: string): {
+    pending: ConfirmationDisplay[];
+    approvalUrl?: string;
+    hint: string;
+  } {
+    // Returns the DAEMON's own description of each blocked action, not the model's words
+    // (INV-9) — `describeConfirmation` lives in `policy`, beside the store that minted the
+    // capability, so the model has no way to influence what a human is shown.
+    const pending = this.get(sessionId).capabilities.listPending().map(describeConfirmation);
+    if (pending.length === 0) {
+      return { pending, hint: "Nothing is awaiting approval." };
+    }
+    const url = this.confirmServer
+      ? `${this.confirmServer.url}/pending?sessionId=${encodeURIComponent(sessionId)}&token=${this.confirmServer.token}`
+      : undefined;
+    return {
+      pending,
+      ...(url ? { approvalUrl: url } : {}),
+      hint: url
+        ? "A person must open this URL and approve or deny. You cannot approve on their behalf."
+        : "A person must approve this out of band. The approval channel is not running — start the daemon with the confirm server enabled.",
+    };
   }
 
   /** Called by the inspector confirm UI (never the model) when a human approves. */
   approveConfirmation(sessionId: string, capabilityId: string): boolean {
     return this.get(sessionId).capabilities.approve(capabilityId);
+  }
+
+  /** Called by the inspector confirm UI when a human refuses. Burns the capability. */
+  denyConfirmation(sessionId: string, capabilityId: string): boolean {
+    return this.get(sessionId).capabilities.deny(capabilityId);
+  }
+
+  /**
+   * Start the loopback approval channel. Separate from the constructor so a test or a
+   * headless run can decline to open a socket; when it is not running,
+   * listPendingConfirmations says so rather than implying approval is possible.
+   */
+  async startConfirmChannel(port = 0): Promise<{ url: string; token: string }> {
+    if (!this.confirmServer) {
+      this.confirmServer = await startConfirmServer(
+        {
+          listPending: (sid) => this.get(sid).capabilities.listPending(),
+          approve: (sid, cid) => this.approveConfirmation(sid, cid),
+          deny: (sid, cid) => this.denyConfirmation(sid, cid),
+        },
+        port,
+      );
+    }
+    return { url: this.confirmServer.url, token: this.confirmServer.token };
+  }
+
+  async stopConfirmChannel(): Promise<void> {
+    await this.confirmServer?.close();
+    this.confirmServer = undefined;
   }
 
   /** Provision a secret value out-of-band (human-types fallback for M1). */

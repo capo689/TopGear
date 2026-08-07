@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>High-risk action</title></head>
+<body>
+<h1>Account settings</h1>
+
+<!-- A button whose LABEL carries high intent. The risk classifier rates this high on the
+     label alone, which is the point: the daemon must block it, mint a pending capability
+     describing it, and require a human to approve before it can proceed. Nothing here is
+     actually destructive - clicking only sets a flag - so the test can assert the gate
+     without the fixture needing to do anything real. -->
+<form id="danger" action="/noop" onsubmit="return false">
+  <label for="confirmText">Type the account name</label>
+  <input id="confirmText" name="confirmText" type="text" />
+  <button id="del" type="button" onclick="window.__deleted = true">Delete account permanently</button>
+</form>
+
+<p id="state">not deleted</p>
+<script>
+  document.getElementById("del").addEventListener("click", () => {
+    document.getElementById("state").textContent = "deleted";
+  });
+</script>
+</body>
+</html>
