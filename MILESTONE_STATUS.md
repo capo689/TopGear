@@ -128,35 +128,72 @@ Fresh `git clone` → `pnpm install --frozen-lockfile` → `pnpm build` → `tur
 
 ---
 
-## INV-10 — BLOCKED, not passed (durable storage not provisioned)
+## STORAGE MIGRATION — quarantine moved from Vercel Blob to Supabase Postgres
 
-`GET /api/health` → **200**, body `{"service":"commons-ingest","release":"R1","storage":"unconfigured",…}`.
-Production is UP; quarantine storage is not wired (`SUPABASE_DB_URL` unset), so
-`POST /api/contributions` returns 503 by design rather than silently dropping data.
+Blob is object storage: put/get by key, no queries. Aggregation IS the commons, so the store
+is now Postgres. Blob is abandoned outright — no fallback path (a fallback means two storage
+contracts to keep honest, and parity discipline already shows what a second copy of a contract
+costs). Schema/role/grants were pre-built and hard-isolated; this wave wired the code to them.
 
-**Production verified green after the merge** (standing law): deployment
-`dpl_4RSf1jbGLyfMQqfvdwLfr1P6E59c`, target `production`, state `READY`, commit `7e580e49`
-= the current `main` tip. Polled `/api/health` across two watchers —
-12:00:29→12:19:34 at 60 s, then 12:21:09→12:59:14 at 120 s: **40/40 samples `unconfigured`
-over ~59 minutes**. The second watcher was armed to run `gate-inv10.mjs` automatically the
-moment `storage` changed; it never fired. Ace's Blob provisioning did not land during this
-session, so INV-10 is untested — blocked, not failed, and not passed.
+| item | state |
+|---|---|
+| `api/contributions.ts` | Blob PUT + readback → `INSERT ... RETURNING`. PIPE-02 is now the same statement: the row Postgres actually committed, asserted against the DERIVED installId. Every prior guarantee kept (order, Class C allowlist, origin check, status codes, ed25519, COST-03 ip→verify→id with Retry-After). 503 without `SUPABASE_DB_URL` (INV-10). |
+| `api/purge.ts` | list-by-prefix + delete-each → one parameterized `DELETE ... WHERE install_id = $1`; `purged` is the real `rowCount`. AUTHZ-02 unchanged. |
+| `api/health.ts` | `supabase-postgres` \| `unconfigured`, keyed on `SUPABASE_DB_URL` only. Reports PRESENCE, never any part of the string (INV-4). |
+| stub + parity | stub mirrors the new storage contract; the Blob fetch-mock is replaced by an in-process `pg` mock exercising INSERT…RETURNING and DELETE…rowCount; 2 new cases for the typed-store 422. **commons-ingest 47 tests.** |
+| Blob | removed from all code paths, gates, and live docs. DECISIONS keeps the historical entries. |
 
-`scripts/gate-inv10.mjs` is written and waiting. It does NOT accept a status code as proof:
+**Two things measured that would each have broken production:**
+1. The Supavisor pooler presents a **self-signed chain** — strict TLS against the system CA
+   store fails outright. The role password crosses that wire, so the fix is pinning Supabase's
+   published root CA (a public cert, committed), **not** `rejectUnauthorized: false`.
+2. `db.<ref>.supabase.co` has **no A record** (IPv6 only) and Vercel is IPv4, so the pooler is
+   mandatory. Probing both regional poolers with a deliberately bogus password identified the
+   tenant: `aws-0` → "tenant/user not found", `aws-1` → auth-secret error. **Session pooler
+   `aws-1-us-west-2.pooler.supabase.com:5432`.** The same probe confirmed the role exists with
+   no password set.
 
-1. mint a FRESH install identity (used once, so anything under it is ours);
-2. build ONE real Class C record (public origin, structure only, no values, no query string,
-   day-granular — asserted, not assumed), sign it, POST it, expect 202;
-3. **readback**: POST a signed purge proof for the same install; the endpoint lists that
-   install's quarantined objects, so `purged === 1` proves the record was durably there;
-4. purge again → `purged === 0`, proving step 3 deleted rather than merely reported;
-5. negative control: a record whose signature does not match its key is rejected 401.
+**A third caught in production, honestly:** the first `installCommand` (`npm install --omit=dev`)
+passed locally and **failed on Vercel** (ERESOLVE), leaving `main` ERROR for one deployment.
+Cause from the build log: Vercel restores a pnpm-shaped `node_modules`, so npm walked that whole
+tree. Fixed by using the declared package manager —
+`pnpm install --prod --ignore-workspace --no-frozen-lockfile` installs exactly `pg`.
+Production re-verified READY (`dpl_7zLaXVXMLqiAAeqdApzTnS32qmHG`, commit `9d5e785`), and the
+deployed functions were probed to prove `pg` RESOLVES AT RUNTIME (POST `{}` → clean 400/401, not
+a platform 500 — a missing module would have been a 500).
 
-It also leaves the commons clean (the test record is purged, not left in the corpus). Run it
-the moment `storage` stops reading `unconfigured`. **Until then INV-10 is an honest BLOCKED**
-(the script exits 2 for blocked, distinct from a fail).
+### Isolation (shared Supabase project "max")
 
----
+`browser_bridge_app` is the isolation boundary because `/api/contributions` is a public
+unauthenticated write. It holds USAGE on `browser_bridge` and SELECT/INSERT/DELETE on one
+table — **no UPDATE** (signed records are immutable: insert → read back → purge). Verified: 0 of
+max's public tables SELECT-able.
+
+**Loose thread closed.** `browser_bridge_app` inherited EXECUTE on
+`public.set_compton_gallery_updated_at()` via the PUBLIC pseudo-role. Postgres has no per-role
+negative grant, so it was revoked FROM PUBLIC — blast radius one function. Measured after:
+
+| check | before | after |
+|---|---|---|
+| `browser_bridge_app` EXECUTE | **true** | **false** |
+| anon / authenticated / service_role / postgres EXECUTE | true | **true** (explicit grants intact) |
+| triggers still attached | 2 | **2** |
+| public-schema functions executable by the app role | 1 | **0** |
+
+USAGE on schema `public` is deliberately left alone: it is also PUBLIC-inherited, and revoking
+it from PUBLIC would break every other role in max. Schema usage with zero object privileges
+grants nothing readable — measured: 0 functions executable, 0 tables selectable.
+
+## INV-10 — still BLOCKED, now on one credential step (not on infrastructure)
+
+`GET /api/health` → 200, `storage: "unconfigured"`. The database, schema, role, grants and code
+are all in place; what remains is the role password + `SUPABASE_DB_URL` in Vercel, which needs
+account access and must not pass through a transcript.
+
+`scripts/gate-inv10.mjs` (updated for Postgres) proves durability by READBACK, never by status
+code: fresh single-use identity → one real Class C record → 202 → signed purge returns
+`purged === 1` (the row was really there) → second purge returns `0` → 401 negative control.
+Exit 2 = blocked, so it can never be mistaken for a pass.
 
 ## D4 — CLOSED. Probe state leak + false empty-option report (both halves fixed, artifact-gated)
 
