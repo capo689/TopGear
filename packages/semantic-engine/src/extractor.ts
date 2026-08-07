@@ -522,7 +522,17 @@ export function pageExtractor(options: ExtractOptions): RawView {
       if (match) root = (match.closest("section") as Element) ?? match.parentElement ?? doc.body;
     }
     const blocks: RawContentBlock[] = [];
-    root.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,code").forEach((el) => {
+
+    // Elements handled by a dedicated pass below. Skipped by the generic passes so a
+    // <td><p>… doesn't emit both a table block AND a paragraph block for the same text.
+    const insideHandled = (el: Element): boolean => !!(el.closest("table") || el.closest("dl"));
+
+    // ---- Known leaf tags ----
+    // Was a hardcoded allowlist: anything not listed (table, dl, figcaption, …) vanished
+    // with NO signal that content had been omitted. Live-confirmed on Wikipedia: every
+    // table and infobox returned empty while the surrounding prose came through fine.
+    root.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,code,figcaption").forEach((el) => {
+      if (insideHandled(el)) return;
       const t = text(el);
       if (!t) return;
       const tag = el.tagName.toLowerCase();
@@ -530,8 +540,203 @@ export function pageExtractor(options: ExtractOptions): RawView {
       else if (tag === "li") blocks.push({ kind: "list", text: t });
       else if (tag === "blockquote") blocks.push({ kind: "quote", text: t });
       else if (tag === "pre" || tag === "code") blocks.push({ kind: "code", text: t });
+      else if (tag === "figcaption") blocks.push({ kind: "other", text: t });
       else blocks.push({ kind: "paragraph", text: t });
     });
+
+    // ---- Tables ----
+    // One block per ROW, each cell rendered "Header: value". Deliberately not a markdown
+    // table: blocks get paged, truncated and read out of order downstream, and a bare
+    // "Amazon | 716 | 79.9" means nothing without the header row beside it. Prefixing each
+    // cell with its column label makes every row self-describing in isolation.
+    const SEP = String.fromCharCode(1); // cannot occur in page text
+
+    // Flatten a cell WITH list/line separators. Plain textContent concatenates block
+    // children with no delimiter, so an infobox "Founders" cell of three <li> came back as
+    // "Steve JobsSteve WozniakRonald Wayne" — live-confirmed on the Apple article.
+    const cellText = (el: Element | null): string => {
+      if (!el) return "";
+      const parts: string[] = [];
+      const walk = (node: Node): void => {
+        for (const child of Array.from(node.childNodes)) {
+          if (child.nodeType === 3) parts.push(child.textContent ?? "");
+          else if (child.nodeType === 1) {
+            const tg = (child as Element).tagName;
+            if (tg === "BR") parts.push(SEP);
+            else if (tg === "LI" || tg === "P" || tg === "DD" || tg === "DT") {
+              parts.push(SEP);
+              walk(child);
+              parts.push(SEP);
+            } else walk(child);
+          }
+        }
+      };
+      walk(el);
+      return parts
+        .join("")
+        .split(SEP)
+        .map((s) => s.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join(", ");
+    };
+
+    root.querySelectorAll("table").forEach((table) => {
+      if (table.parentElement && table.parentElement.closest("table")) return; // outer table already flattened it
+
+      const caption = table.querySelector(":scope > caption");
+      const captionText = caption ? text(caption) : "";
+      if (captionText) blocks.push({ kind: "table", text: `Caption: ${captionText}` });
+
+      const allRows = Array.from(
+        table.querySelectorAll(":scope > tr, :scope > thead > tr, :scope > tbody > tr, :scope > tfoot > tr"),
+      );
+      const cellsOf = (row: Element): Element[] => Array.from(row.querySelectorAll(":scope > td, :scope > th"));
+
+      // Resolve the real occupancy GRID before reading labels. Zipping a row's cells to
+      // headers by index is wrong on any table that spans cells: Wikipedia rowspans
+      // Headquarters across runs of rows sharing a country, so a spanned row carries 8
+      // <td>s against 9 headers and every label past the gap shifts by one — emitting
+      // "State-owned: [6]" for what is actually the Ref column. Confidently mislabeled
+      // data is worse than missing data; a reader cannot tell it is wrong.
+      type GridCell = { el: Element; text: string; colStart: number; colSpan: number };
+      const grid: GridCell[][] = [];
+      const carry: { colStart: number; colSpan: number; text: string; el: Element; rowsLeft: number }[] = [];
+      const intAttr = (el: Element, name: string): number => {
+        const n = parseInt(el.getAttribute(name) ?? "1", 10);
+        return Number.isFinite(n) && n > 0 ? Math.min(n, 1000) : 1;
+      };
+
+      for (const row of allRows) {
+        const occupied = new Map<number, GridCell>();
+        for (const c of carry) {
+          for (let i = c.colStart; i < c.colStart + c.colSpan; i += 1) {
+            occupied.set(i, { el: c.el, text: c.text, colStart: c.colStart, colSpan: c.colSpan });
+          }
+        }
+        let col = 0;
+        for (const cell of cellsOf(row)) {
+          while (occupied.has(col)) col += 1; // skip columns held by a live rowspan
+          const colSpan = intAttr(cell, "colspan");
+          const rowSpan = intAttr(cell, "rowspan");
+          const value = cellText(cell);
+          const placed: GridCell = { el: cell, text: value, colStart: col, colSpan };
+          for (let i = col; i < col + colSpan; i += 1) occupied.set(i, placed);
+          // rowsLeft counts rows INCLUDING this one; the decrement at the end of this same
+          // iteration takes it to rowSpan-1, the number of FUTURE rows still covered.
+          // Seeding it at rowSpan-1 expires a rowspan="2" before it reaches row two.
+          if (rowSpan > 1) carry.push({ colStart: col, colSpan, text: value, el: cell, rowsLeft: rowSpan });
+          col += colSpan;
+        }
+        const width = occupied.size ? Math.max(...occupied.keys()) + 1 : 0;
+        const dense: GridCell[] = [];
+        for (let i = 0; i < width; i += 1) {
+          const g = occupied.get(i);
+          if (g) dense[i] = g;
+        }
+        grid.push(dense);
+        for (const c of carry) c.rowsLeft -= 1;
+        for (let i = carry.length - 1; i >= 0; i -= 1) if ((carry[i]?.rowsLeft ?? 0) <= 0) carry.splice(i, 1);
+      }
+
+      // A dedicated header row: inside <thead>, or a first row made ENTIRELY of <th> cells
+      // (2+ of them — a lone leading <th> is a per-row label, not a column header).
+      const theadRow = table.querySelector(":scope > thead > tr");
+      const firstRow = allRows[0];
+      const firstRowIsAllTh =
+        !!firstRow && cellsOf(firstRow).length > 1 && cellsOf(firstRow).every((c) => c.tagName === "TH");
+      const headerRow = theadRow ?? (firstRowIsAllTh ? firstRow : null);
+      const headerRowIdx = headerRow ? allRows.indexOf(headerRow) : -1;
+      const headerCells = headerRowIdx >= 0 ? (grid[headerRowIdx] ?? []) : [];
+      const headers: string[] = [];
+      for (let i = 0; i < headerCells.length; i += 1) headers[i] = headerCells[i]?.text ?? "";
+      const distinctHeaders = Array.from(new Set(headers.filter(Boolean)));
+      if (distinctHeaders.length > 1) blocks.push({ kind: "table", text: `Columns: ${distinctHeaders.join(" | ")}` });
+
+      let rowIndex = 0;
+      for (let r = 0; r < allRows.length; r += 1) {
+        if (r === headerRowIdx) continue;
+        const dense = grid[r] ?? [];
+        const present = dense.filter(Boolean);
+        if (!present.length) continue;
+        rowIndex += 1;
+
+        // Emit per COLUMN, not per <td>: a rowspan'd value repeats into the rows it
+        // visually covers (what a human reads off the rendered table); a colspan'd value
+        // is emitted once for its span rather than duplicated.
+        const seen = new Set<GridCell>();
+        const parts: string[] = [];
+        for (let c = 0; c < dense.length; c += 1) {
+          const cell = dense[c];
+          if (!cell || seen.has(cell)) continue;
+          seen.add(cell);
+          const label = headers[cell.colStart] || headers[c] || "";
+          if (!label && !cell.text) continue;
+          parts.push(label ? `${label}: ${cell.text}` : cell.text);
+        }
+        if (!parts.length) continue;
+
+        let rowText: string;
+        if (distinctHeaders.length > 1) rowText = parts.join(" | ");
+        else if (present.length === 2 && present[0]?.el.tagName === "TH")
+          rowText = `${present[0]?.text ?? ""}: ${present[1]?.text ?? ""}`; // key/value infobox shape
+        else rowText = `Row ${rowIndex}: ${parts.join(" | ")}`;
+        if (rowText.trim()) blocks.push({ kind: "table", text: rowText });
+      }
+    });
+
+    // ---- Definition lists ----
+    // Same self-describing rationale: pair each <dd> with its governing <dt> term(s)
+    // rather than emitting them as separate, context-free blocks.
+    root.querySelectorAll("dl").forEach((dl) => {
+      if (dl.parentElement && dl.parentElement.closest("dl")) return;
+      let terms: string[] = [];
+      let consumed = false;
+      Array.from(dl.children).forEach((child) => {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "dt") {
+          if (consumed) {
+            terms = [];
+            consumed = false;
+          }
+          const t = text(child);
+          if (t) terms.push(t);
+        } else if (tag === "dd") {
+          const t = text(child);
+          if (t) {
+            const label = terms.join(", ");
+            blocks.push({ kind: "list", text: label ? `${label}: ${t}` : t });
+            consumed = true;
+          }
+        }
+      });
+      if (!consumed && terms.length) blocks.push({ kind: "list", text: terms.join(", ") });
+    });
+
+    // ---- Everything else ----
+    // The root fix. Rather than extending the allowlist forever, surface ANY element
+    // carrying text no emitted block already covers, as kind "other" — unknown markup
+    // degrades to visible-but-uncategorized instead of invisible.
+    // Recurse top-down and emit ONE block at the outermost node whose subtree contains no
+    // already-handled element and has text; nothing inside it would otherwise be emitted,
+    // so there is nothing deeper to find and nothing above needs to repeat it.
+    const SKIP = new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "SVG"]);
+    const HANDLED =
+      "table, dl, h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, code, figcaption, " + INTERACTIVE_SELECTOR;
+    const walkOther = (el: Element): void => {
+      if (SKIP.has(el.tagName)) return;
+      if (el.tagName === "TABLE" || el.tagName === "DL") return; // fully handled above
+      const tag = el.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(tag) || ["p", "li", "blockquote", "pre", "code", "figcaption"].includes(tag)) return;
+      if (el.matches(INTERACTIVE_SELECTOR)) return; // reported via `elements`, not readable content
+      if (el.querySelector(HANDLED) === null) {
+        const t = text(el);
+        if (t) blocks.push({ kind: "other", text: t });
+        return; // emitted for the whole subtree; do not descend
+      }
+      for (const child of Array.from(el.children)) walkOther(child);
+    };
+    for (const child of Array.from(root.children)) walkOther(child);
+
     content = blocks;
   }
 
