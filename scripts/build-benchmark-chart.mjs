@@ -121,10 +121,16 @@ ${grouped(fidelity.map((f) => ({ k: f.k, a: f.a, b: f.b })), (v) => `${v}/50`, "
 <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Browser Bridge</span>
 <span><span class="sw" style="background:var(--s2)"></span>Generic browser tools</span></div>
 ${grouped(ctxPairs, (v) => `${v.toFixed(0)}KB`, "Context per task")}
-<div class="note"><strong>Open issue, not a win.</strong> Bridge returns 1.6× more bytes overall. Two causes, both real:
-one block per table row repeats every column header (that is what buys the fidelity result above — a row stays readable on its
-own), and a content read still carries page furniture the caller did not ask for. The Apple article is the worst case at
-258KB vs 154KB. Reducing this without giving back the fidelity is the next piece of work.</div></div>
+<div class="note"><strong>Was 1.7× worse; now ${(bkb / gkb).toFixed(2)}×.</strong> Measuring where the bytes went found a bug, not a
+trade-off: <code>textContent</code> returns the text inside a nested <code>&lt;style&gt;</code>, so stylesheet source was being
+emitted as page content — half the bytes of a table read. Rendered text only now. Navigation landmarks
+(<code>nav</code>, <code>footer</code>, <code>banner</code>, <code>complementary</code>) are also excluded from content reads,
+by ARIA role rather than by class name, so it does not rot per-site. The targeted table scrape went 20KB → 10KB and is now level
+with flat text extraction while keeping 50/50 fidelity.
+<br><br><strong>Still open:</strong> a whole-article read is 206KB vs 154KB. That remainder is structural — one JSON block per
+element carries ~25 bytes of envelope, and 1,095 blocks is ~27KB of pure overhead. Worth attacking with a compact table encoding
+(emit column headers once instead of per row, which is separable from the grid resolution that actually buys the fidelity), but
+it is a real cost today and is shown as one.</div></div>
 
 <div class="card"><h2>Every task, both arms</h2>
 <table><thead><tr><th>Task</th><th class="n">Bridge</th><th class="n">Generic</th><th class="n">Ratio</th>

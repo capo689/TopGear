@@ -5,11 +5,15 @@
 <nav>
   <ul><li>Nav link one</li><li>Nav link two</li><li>Nav link three</li></ul>
 </nav>
+<aside role="complementary"><p>Sidebar chrome, excluded from a content read.</p></aside>
 <header><p>Site header boilerplate that a content read should be able to exclude.</p></header>
 
 <main>
   <h1>The actual article</h1>
   <p>Body paragraph that belongs to the main content.</p>
+  <!-- Wikipedia nests <style> inside <li> constantly; textContent would emit the CSS
+       source as page content. Measured at HALF the bytes of a real table read. -->
+  <ul><li><style>.foo{color:red;background:url("x.png")}</style>Real list item text</li></ul>
   <table>
     <thead><tr><th>Item</th><th>Value</th></tr></thead>
     <tbody><tr><td>Alpha</td><td>1</td></tr></tbody>

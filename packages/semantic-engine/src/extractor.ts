@@ -202,7 +202,25 @@ export function pageExtractor(options: ExtractOptions): RawView {
   const esc = (s: string): string =>
     typeof CSS !== "undefined" && CSS.escape ? CSS.escape(s) : s.replace(/["\\#.:>~+*\[\]]/g, "\\$&");
 
-  const text = (el: Element | null): string => (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+  // Non-rendered subtrees. `textContent` happily returns the text inside a <style> or
+  // <script>, so any element wrapping one yields its CSS or JS as "page content" —
+  // measured at HALF the bytes of a Wikipedia table read, and Wikipedia nests <style>
+  // inside <li> constantly. Rendered text only.
+  const NON_RENDERED = /^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|SVG)$/;
+  const rawText = (el: Element | null): string => {
+    if (!el) return "";
+    if (NON_RENDERED.test(el.tagName)) return "";
+    let out = "";
+    const walk = (node: Node): void => {
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType === 3) out += child.textContent ?? "";
+        else if (child.nodeType === 1 && !NON_RENDERED.test((child as Element).tagName)) walk(child);
+      }
+    };
+    walk(el);
+    return out;
+  };
+  const text = (el: Element | null): string => rawText(el).replace(/\s+/g, " ").trim();
 
   const isVisible = (el: Element): boolean => {
     const he = el as HTMLElement;
@@ -532,9 +550,20 @@ export function pageExtractor(options: ExtractOptions): RawView {
     }
     const blocks: RawContentBlock[] = [];
 
+    // Page furniture. A CONTENT read is a request for what the page is about, and site
+    // chrome is not that: on the Apple article, navigation landmarks (language list, table
+    // of contents, category bar, navboxes) accounted for 849 blocks and 118KB — roughly
+    // half the read, none of it asked for. Excluded by ARIA landmark role, which is a
+    // standard, rather than by class names, which would be a per-site denylist that rots.
+    // Only applies to `content` scope; `full` still sees everything, because that scope
+    // exists to find elements to act on.
+    const FURNITURE = 'nav, [role="navigation"], footer, [role="contentinfo"], [role="banner"], [role="complementary"], [role="search"]';
+    const isFurniture = (el: Element): boolean => scope.kind === "content" && !!el.closest(FURNITURE);
+
     // Elements handled by a dedicated pass below. Skipped by the generic passes so a
     // <td><p>… doesn't emit both a table block AND a paragraph block for the same text.
-    const insideHandled = (el: Element): boolean => !!(el.closest("table") || el.closest("dl"));
+    const insideHandled = (el: Element): boolean =>
+      !!(el.closest("table") || el.closest("dl")) || isFurniture(el);
 
     // ---- Known leaf tags ----
     // Was a hardcoded allowlist: anything not listed (table, dl, figcaption, …) vanished
@@ -571,6 +600,7 @@ export function pageExtractor(options: ExtractOptions): RawView {
           if (child.nodeType === 3) parts.push(child.textContent ?? "");
           else if (child.nodeType === 1) {
             const tg = (child as Element).tagName;
+            if (NON_RENDERED.test(tg)) continue; // never emit stylesheet/script text as data
             if (tg === "BR") parts.push(SEP);
             else if (tg === "LI" || tg === "P" || tg === "DD" || tg === "DT") {
               parts.push(SEP);
@@ -591,6 +621,7 @@ export function pageExtractor(options: ExtractOptions): RawView {
 
     root.querySelectorAll("table").forEach((table) => {
       if (table.parentElement && table.parentElement.closest("table")) return; // outer table already flattened it
+      if (isFurniture(table)) return; // navbox tables are chrome, not content
 
       const caption = table.querySelector(":scope > caption");
       const captionText = caption ? text(caption) : "";
@@ -698,6 +729,7 @@ export function pageExtractor(options: ExtractOptions): RawView {
     // rather than emitting them as separate, context-free blocks.
     root.querySelectorAll("dl").forEach((dl) => {
       if (dl.parentElement && dl.parentElement.closest("dl")) return;
+      if (isFurniture(dl)) return;
       let terms: string[] = [];
       let consumed = false;
       Array.from(dl.children).forEach((child) => {
@@ -733,6 +765,7 @@ export function pageExtractor(options: ExtractOptions): RawView {
       "table, dl, h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, code, figcaption, " + INTERACTIVE_SELECTOR;
     const walkOther = (el: Element): void => {
       if (SKIP.has(el.tagName)) return;
+      if (isFurniture(el)) return; // do not descend into page chrome on a content read
       if (el.tagName === "TABLE" || el.tagName === "DL") return; // fully handled above
       const tag = el.tagName.toLowerCase();
       if (/^h[1-6]$/.test(tag) || ["p", "li", "blockquote", "pre", "code", "figcaption"].includes(tag)) return;

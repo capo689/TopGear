@@ -39,13 +39,13 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}
 Bridge ran through the shipping <span class="mono">.mcpb</span> over MCP stdio, exactly as Claude loads it. The generic arm ran
 Playwright doing what a browser tool does: navigate, read the page, act on one element at a time, read back to verify — one
 primitive per turn, because each is a separate call the model makes and waits for.
-Generated 2026-08-07T19:08:59.054Z.</p>
+Generated 2026-08-07T19:20:59.062Z.</p>
 
 <div class="tiles">
 <div class="tile"><div class="l">Total turns</div><div class="v good">3.1× fewer</div><div class="n">7 vs 22 across 5 tasks</div></div>
 <div class="tile"><div class="l">Best case (7-field form)</div><div class="v good">4.5× fewer</div><div class="n">2 turns vs 9</div></div>
 <div class="tile"><div class="l">Table rows kept intact</div><div class="v good">50/50</div><div class="n">generic tools: 37/50</div></div>
-<div class="tile"><div class="l">Context returned</div><div class="v crit">1.7× more</div><div class="n">294KB vs 173KB — see note</div></div>
+<div class="tile"><div class="l">Context returned</div><div class="v crit">1.3× more</div><div class="n">227KB vs 173KB — see note</div></div>
 </div>
 
 <div class="card"><h2>Turns per task — lower is better</h2>
@@ -67,21 +67,27 @@ answer versus a fast one.</p>
 <p>Where the bridge currently loses.</p>
 <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Browser Bridge</span>
 <span><span class="sw" style="background:var(--s2)"></span>Generic browser tools</span></div>
-<svg viewBox="0 0 880 282" width="100%" height="282" role="img" aria-label="Context per task"><text x="198" y="34" fill="var(--ink2)" font-size="12" text-anchor="end">Scrape 50-row table</text><rect x="208" y="10" width="44.19949428895283" height="16" rx="4" fill="var(--s1)" data-t="Scrape 50-row table — Bridge: 20KB"/><text x="260.1994942889528" y="23" fill="var(--ink2)" font-size="11.5" font-weight="600">20KB</text><rect x="208" y="30" width="22.662200942427035" height="16" rx="4" fill="var(--s2)" data-t="Scrape 50-row table — Generic tools: 10KB"/><text x="238.66220094242703" y="43" fill="var(--ink2)" font-size="11.5" font-weight="600">10KB</text><text x="198" y="86" fill="var(--ink2)" font-size="12" text-anchor="end">Extract 6 infobox facts</text><rect x="208" y="62" width="562" height="16" rx="4" fill="var(--s1)" data-t="Extract 6 infobox facts — Bridge: 258KB"/><text x="778" y="75" fill="var(--ink2)" font-size="11.5" font-weight="600">258KB</text><rect x="208" y="82" width="335.15428736063564" height="16" rx="4" fill="var(--s2)" data-t="Extract 6 infobox facts — Generic tools: 154KB"/><text x="551.1542873606356" y="95" fill="var(--ink2)" font-size="11.5" font-weight="600">154KB</text><text x="198" y="138" fill="var(--ink2)" font-size="12" text-anchor="end">Fill 7-field form</text><rect x="208" y="114" width="2" height="16" rx="4" fill="var(--s1)" data-t="Fill 7-field form — Bridge: 1KB"/><text x="218" y="127" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><rect x="208" y="134" width="2.7334402377675926" height="16" rx="4" fill="var(--s2)" data-t="Fill 7-field form — Generic tools: 1KB"/><text x="218.73344023776758" y="147" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><text x="198" y="190" fill="var(--ink2)" font-size="12" text-anchor="end">Fill form with no &lt;form&gt;</text><rect x="208" y="166" width="2" height="16" rx="4" fill="var(--s1)" data-t="Fill form with no &lt;form&gt; — Bridge: 0KB"/><text x="218" y="179" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><rect x="208" y="186" width="2" height="16" rx="4" fill="var(--s2)" data-t="Fill form with no &lt;form&gt; — Generic tools: 0KB"/><text x="218" y="199" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><text x="198" y="242" fill="var(--ink2)" font-size="12" text-anchor="end">Search + read first result</text><rect x="208" y="218" width="32.33044084810851" height="16" rx="4" fill="var(--s1)" data-t="Search + read first result — Bridge: 15KB"/><text x="248.3304408481085" y="231" fill="var(--ink2)" font-size="11.5" font-weight="600">15KB</text><rect x="208" y="238" width="15.899972326157089" height="16" rx="4" fill="var(--s2)" data-t="Search + read first result — Generic tools: 7KB"/><text x="231.8999723261571" y="251" fill="var(--ink2)" font-size="11.5" font-weight="600">7KB</text><line x1="208" y1="6" x2="208" y2="272" stroke="var(--base)" stroke-width="1"/></svg>
-<div class="note"><strong>Open issue, not a win.</strong> Bridge returns 1.6× more bytes overall. Two causes, both real:
-one block per table row repeats every column header (that is what buys the fidelity result above — a row stays readable on its
-own), and a content read still carries page furniture the caller did not ask for. The Apple article is the worst case at
-258KB vs 154KB. Reducing this without giving back the fidelity is the next piece of work.</div></div>
+<svg viewBox="0 0 880 282" width="100%" height="282" role="img" aria-label="Context per task"><text x="198" y="34" fill="var(--ink2)" font-size="12" text-anchor="end">Scrape 50-row table</text><rect x="208" y="10" width="27.585193688864432" height="16" rx="4" fill="var(--s1)" data-t="Scrape 50-row table — Bridge: 10KB"/><text x="243.58519368886442" y="23" fill="var(--ink2)" font-size="11.5" font-weight="600">10KB</text><rect x="208" y="30" width="28.358336258669272" height="16" rx="4" fill="var(--s2)" data-t="Scrape 50-row table — Generic tools: 10KB"/><text x="244.35833625866928" y="43" fill="var(--ink2)" font-size="11.5" font-weight="600">10KB</text><text x="198" y="86" fill="var(--ink2)" font-size="12" text-anchor="end">Extract 6 infobox facts</text><rect x="208" y="62" width="562" height="16" rx="4" fill="var(--s1)" data-t="Extract 6 infobox facts — Bridge: 206KB"/><text x="778" y="75" fill="var(--ink2)" font-size="11.5" font-weight="600">206KB</text><rect x="208" y="82" width="419.39518600392785" height="16" rx="4" fill="var(--s2)" data-t="Extract 6 infobox facts — Generic tools: 154KB"/><text x="635.3951860039278" y="95" fill="var(--ink2)" font-size="11.5" font-weight="600">154KB</text><text x="198" y="138" fill="var(--ink2)" font-size="12" text-anchor="end">Fill 7-field form</text><rect x="208" y="114" width="2.2954336296619577" height="16" rx="4" fill="var(--s1)" data-t="Fill 7-field form — Bridge: 1KB"/><text x="218.29543362966197" y="127" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><rect x="208" y="134" width="3.4204893691710705" height="16" rx="4" fill="var(--s2)" data-t="Fill 7-field form — Generic tools: 1KB"/><text x="219.42048936917107" y="147" fill="var(--ink2)" font-size="11.5" font-weight="600">1KB</text><text x="198" y="190" fill="var(--ink2)" font-size="12" text-anchor="end">Fill form with no &lt;form&gt;</text><rect x="208" y="166" width="2" height="16" rx="4" fill="var(--s1)" data-t="Fill form with no &lt;form&gt; — Bridge: 0KB"/><text x="218" y="179" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><rect x="208" y="186" width="2" height="16" rx="4" fill="var(--s2)" data-t="Fill form with no &lt;form&gt; — Generic tools: 0KB"/><text x="218" y="199" fill="var(--ink2)" font-size="11.5" font-weight="600">0KB</text><text x="198" y="242" fill="var(--ink2)" font-size="12" text-anchor="end">Search + read first result</text><rect x="208" y="218" width="27.849128566142635" height="16" rx="4" fill="var(--s1)" data-t="Search + read first result — Bridge: 10KB"/><text x="243.84912856614264" y="231" fill="var(--ink2)" font-size="11.5" font-weight="600">10KB</text><rect x="208" y="238" width="19.896424132598362" height="16" rx="4" fill="var(--s2)" data-t="Search + read first result — Generic tools: 7KB"/><text x="235.89642413259836" y="251" fill="var(--ink2)" font-size="11.5" font-weight="600">7KB</text><line x1="208" y1="6" x2="208" y2="272" stroke="var(--base)" stroke-width="1"/></svg>
+<div class="note"><strong>Was 1.7× worse; now 1.32×.</strong> Measuring where the bytes went found a bug, not a
+trade-off: <code>textContent</code> returns the text inside a nested <code>&lt;style&gt;</code>, so stylesheet source was being
+emitted as page content — half the bytes of a table read. Rendered text only now. Navigation landmarks
+(<code>nav</code>, <code>footer</code>, <code>banner</code>, <code>complementary</code>) are also excluded from content reads,
+by ARIA role rather than by class name, so it does not rot per-site. The targeted table scrape went 20KB → 10KB and is now level
+with flat text extraction while keeping 50/50 fidelity.
+<br><br><strong>Still open:</strong> a whole-article read is 206KB vs 154KB. That remainder is structural — one JSON block per
+element carries ~25 bytes of envelope, and 1,095 blocks is ~27KB of pure overhead. Worth attacking with a compact table encoding
+(emit column headers once instead of per row, which is separable from the grid resolution that actually buys the fidelity), but
+it is a real cost today and is shown as one.</div></div>
 
 <div class="card"><h2>Every task, both arms</h2>
 <table><thead><tr><th>Task</th><th class="n">Bridge</th><th class="n">Generic</th><th class="n">Ratio</th>
 <th class="n">Bridge ctx</th><th class="n">Generic ctx</th><th>Bridge result</th><th>Generic result</th></tr></thead>
 <tbody><tr><td>Scrape 50-row table</td><td class="n">1</td><td class="n">2</td>
 <td class="n">2.0x</td>
-<td class="n">20KB</td><td class="n">10KB</td>
+<td class="n">10KB</td><td class="n">10KB</td>
 <td>50 rows, 50/50 keep country</td><td>50 rows, 37/50 keep country</td></tr><tr><td>Extract 6 infobox facts</td><td class="n">1</td><td class="n">3</td>
 <td class="n">3.0x</td>
-<td class="n">258KB</td><td class="n">154KB</td>
+<td class="n">206KB</td><td class="n">154KB</td>
 <td>6/6 facts, labelled</td><td>6/6 facts, unlabelled</td></tr><tr><td>Fill 7-field form</td><td class="n">2</td><td class="n">9</td>
 <td class="n">4.5x</td>
 <td class="n">1KB</td><td class="n">1KB</td>
@@ -90,8 +96,8 @@ own), and a content read still carries page furniture the caller did not ask for
 <td class="n">0KB</td><td class="n">0KB</td>
 <td>3/3 verified</td><td>3/3 filled</td></tr><tr><td>Search + read first result</td><td class="n">1</td><td class="n">2</td>
 <td class="n">2.0x</td>
-<td class="n">15KB</td><td class="n">7KB</td>
-<td>134 content blocks</td><td>111 text lines</td></tr></tbody></table></div>
+<td class="n">10KB</td><td class="n">7KB</td>
+<td>104 content blocks</td><td>111 text lines</td></tr></tbody></table></div>
 </div>
 <div class="tt" id="tt"></div>
 <script>

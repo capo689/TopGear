@@ -211,3 +211,42 @@ describe("content blocks — landmark scoping", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("content blocks — payload hygiene", () => {
+  it("never emits stylesheet source as page content", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "content", landmark: "main" }));
+    const texts = (raw.content ?? []).map((b) => b.text);
+
+    // textContent happily returns the text inside a nested <style>. Measured on a live
+    // Wikipedia table read, that CSS was 50% of the returned bytes.
+    expect(texts.some((t) => t.includes("color:red") || t.includes("background:url"))).toBe(false);
+    // ...and the real text beside it still comes through.
+    expect(texts).toContain("Real list item text");
+    await page.close();
+  }, 30_000);
+
+  it("excludes navigation landmarks from a content read, by ARIA role", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "content" }));
+    const texts = (raw.content ?? []).map((b) => b.text);
+
+    expect(texts.some((t) => t.includes("Nav link one"))).toBe(false);
+    expect(texts.some((t) => t.includes("Sidebar chrome"))).toBe(false);
+    expect(texts.some((t) => t.includes("Footer boilerplate"))).toBe(false);
+    expect(texts).toContain("Body paragraph that belongs to the main content.");
+    await page.close();
+  }, 30_000);
+
+  it("keeps page furniture visible under `full` scope, which exists to find elements", async () => {
+    const page = await browser.newPage();
+    await page.goto(farm.url + FIXTURES.landmarks);
+    const raw = await extract(page, opts({ kind: "full" }));
+    const texts = (raw.content ?? []).map((b) => b.text);
+
+    expect(texts.some((t) => t.includes("Nav link one"))).toBe(true);
+    await page.close();
+  }, 30_000);
+});
