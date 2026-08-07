@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Async typeahead</title></head>
+<body>
+<h1>Async typeahead</h1>
+
+<!-- A debounced, remote-style typeahead: the listbox is EMPTY until text is typed.
+     This is the Technolutions Slate shape. A playbook that opens the widget and polls
+     for already-rendered options finds nothing here, no matter how long it waits -
+     which is why routing a typeahead to `select` reported "option not found" against
+     a list that had never loaded. The fixture-farm's other combobox fixtures all
+     render their full list on open, so none of them reproduce this. -->
+<label id="school-label" for="school">School Name</label>
+<input id="school" role="combobox" aria-autocomplete="list" aria-expanded="false"
+       aria-controls="school-list" aria-labelledby="school-label" autocomplete="off" />
+<ul id="school-list" role="listbox" hidden></ul>
+
+<script>
+  const SCHOOLS = [
+    "Springfield High School",
+    "Springfield Preparatory Academy",
+    "Shelbyville High School",
+    "Capital City Magnet School",
+  ];
+  const input = document.getElementById("school");
+  const list = document.getElementById("school-list");
+  let timer = null;
+
+  function render(matches) {
+    list.innerHTML = "";
+    for (const name of matches) {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.textContent = name;
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.value = name;
+        li.setAttribute("aria-selected", "true");
+        list.hidden = true;
+        input.setAttribute("aria-expanded", "false");
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      list.appendChild(li);
+    }
+    const open = matches.length > 0;
+    list.hidden = !open;
+    input.setAttribute("aria-expanded", String(open));
+  }
+
+  input.addEventListener("input", () => {
+    if (timer) clearTimeout(timer);
+    const q = input.value.trim().toLowerCase();
+    // Debounce, as a remote-backed typeahead would.
+    timer = setTimeout(() => {
+      if (!q) return render([]);
+      render(SCHOOLS.filter((s) => s.toLowerCase().includes(q)));
+    }, 120);
+  });
+
+  // Opening WITHOUT typing yields nothing - the defining property of this widget.
+  input.addEventListener("focus", () => {
+    if (!input.value.trim()) render([]);
+  });
+</script>
+</body>
+</html>

@@ -103,6 +103,15 @@ function buildRecordAction(el: RawElement, value: FieldValue): Action {
   if (typeof value === "boolean") return { op: "check", target: { ref: el.ref }, value };
   if (typeof value === "string") {
     if (el.widgetKind === "native-date") return { op: "set_date", target: { ref: el.ref }, value };
+    // A typeahead must be TYPED into before it has options to pick from. Routing it to
+    // `select` sends it to a playbook that opens the widget and polls for already-rendered
+    // options and never types, so an async/debounced list (Technolutions Slate) is always
+    // empty and the fill reports "option not found" against a list that never loaded.
+    // applySearchPick is the correct playbook and was already tested -- nothing could
+    // reach it from here, because this function only ever looked at tag/role.
+    if (el.widgetKind === "typeahead") {
+      return { op: "search_pick", target: { ref: el.ref }, query: value, pick: value };
+    }
     if (el.tag === "select" || el.role === "combobox" || el.role === "listbox") {
       return { op: "select", target: { ref: el.ref }, value };
     }
@@ -222,37 +231,70 @@ export class Session {
    * SecretRefs and sensitive-destination checks flow through the same `act` path.
    */
   async fillRecord(req: FillRecordRequest): Promise<FillRecordResult> {
-    const raw = await this.capture({ kind: "all_forms" });
     const policy = req.ambiguityPolicy ?? "ask";
-    const matched: FieldMatch[] = [];
-    const unmatched: string[] = [];
-    const ambiguities: FieldAmbiguity[] = [];
-    const actions: Action[] = [];
 
-    for (const [key, value] of Object.entries(req.record)) {
-      const outcome = matchField(key, value, raw.elements);
-      let element: RawElement;
-      if (outcome.status === "unmatched") {
-        unmatched.push(key);
-        continue;
-      }
-      if (outcome.status === "ambiguous") {
-        if (policy === "ask") {
-          ambiguities.push({ field: key, candidates: (outcome.candidates ?? []).map(rawToRecord) });
+    // Resolve every record key against one candidate element set. Pure -- no page I/O --
+    // so it can be re-run against a second, wider capture without side effects.
+    const resolve = (elements: RawElement[]) => {
+      const matched: FieldMatch[] = [];
+      const unmatched: string[] = [];
+      const ambiguities: FieldAmbiguity[] = [];
+      const actions: Action[] = [];
+      for (const [key, value] of Object.entries(req.record)) {
+        const outcome = matchField(key, value, elements);
+        let element: RawElement;
+        if (outcome.status === "unmatched") {
+          unmatched.push(key);
           continue;
         }
-        if (policy === "skip") continue;
-        element = outcome.candidates![0]!; // best_effort
-      } else {
-        element = outcome.element!;
+        if (outcome.status === "ambiguous") {
+          if (policy === "ask") {
+            ambiguities.push({ field: key, candidates: (outcome.candidates ?? []).map(rawToRecord) });
+            continue;
+          }
+          if (policy === "skip") continue;
+          element = outcome.candidates![0]!; // best_effort
+        } else {
+          element = outcome.element!;
+        }
+        actions.push(buildRecordAction(element, value));
+        matched.push({ field: key, target: this.labelEl(element), confidence: outcome.confidence });
       }
-      actions.push(buildRecordAction(element, value));
-      matched.push({ field: key, target: this.labelEl(element), confidence: outcome.confidence });
+      return { matched, unmatched, ambiguities, actions };
+    };
+
+    // all_forms is correct and cheapest for the common case.
+    let pass = resolve((await this.capture({ kind: "all_forms" })).elements);
+
+    // Retry WIDER when the form-scoped capture left keys unresolved. Two page shapes break
+    // the narrow scope and only this trigger catches both:
+    //   1. No <form> at all -- a div-based pseudo-form (confirmed live on the Seattle
+    //      Public Library card application). all_forms yields zero elements, so matching
+    //      ran against nothing and every key reported "unmatched" -- indistinguishable
+    //      from "the record genuinely did not match".
+    //   2. A real but UNRELATED <form> (a site-search box) while the record's target
+    //      fields sit outside it. Here all_forms returns a non-empty but WRONG element
+    //      set, so a retry keyed on "zero elements found" would never fire. Keying on
+    //      UNRESOLVED KEYS catches both.
+    // Only adopt the wider result if it genuinely resolves more, so a record that
+    // legitimately does not match is never relabelled as a fallback match.
+    let usedScopeFallback = false;
+    if (pass.unmatched.length > 0) {
+      const wide = resolve((await this.capture({ kind: "full" })).elements);
+      if (wide.unmatched.length < pass.unmatched.length) {
+        pass = wide;
+        usedScopeFallback = true;
+      }
     }
+
+    const { matched, unmatched, ambiguities, actions } = pass;
 
     const batch: BatchResult = actions.length
       ? await this.act({ actions })
       : { status: "completed", revision: this.revisioner.current, completed: 0, results: [] };
+    // Tell the caller this was a looser, wider-scope match, so a "matched" field here is
+    // not trusted with the same confidence as a normal form-scoped match.
+    if (usedScopeFallback) batch.matchedViaScopeFallback = true;
 
     return { matched, unmatched, ambiguities, batch };
   }

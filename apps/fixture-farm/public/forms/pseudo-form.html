@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Pseudo-form (no form element)</title></head>
+<body>
+<h1>Library card application</h1>
+
+<!-- A REAL but unrelated form: a site-search box. This is the shape that defeats a
+     fallback keyed on "zero elements found" - all_forms returns this box's field, so
+     the capture is non-empty but WRONG, and the record's actual targets below are
+     invisible. Confirmed live on vendor-hosted pages that pair a site search with a
+     JS-driven main form. -->
+<form action="/search" role="search">
+  <label for="q">Search the catalog</label>
+  <input id="q" name="q" type="search" />
+</form>
+
+<!-- The real application fields: no <form> ancestor anywhere. Confirmed live on the
+     Seattle Public Library card application. -->
+<div class="application">
+  <label for="fullName">Full name</label>
+  <input id="fullName" name="fullName" type="text" />
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" />
+
+  <label for="city">City</label>
+  <input id="city" name="city" type="text" />
+</div>
+</body>
+</html>

@@ -13,6 +13,12 @@ export const FIXTURES = {
   customSelect: "/widgets/custom-select.html",
   libraryWidgets: "/widgets/library-widgets.html",
   accordion: "/widgets/accordion.html",
+  /** Debounced typeahead whose listbox is empty until text is typed (Slate shape). */
+  asyncTypeahead: "/widgets/async-typeahead.html",
+  /** Real fields with no <form> ancestor, beside an unrelated site-search form. */
+  pseudoForm: "/forms/pseudo-form.html",
+  /** Tables, infobox, spanned cells, multi-value cells, definition list, figcaption. */
+  tablesAndLists: "/content/tables-and-lists.html",
   injection: "/security/injection.html",
   grantEscape: "/security/grant-escape.html",
   // Expected-fail until M5 (full risk classifier + network backstop). See MILESTONE_STATUS.

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Tables, lists and captions</title></head>
+<body>
+<h1>Readable content shapes</h1>
+<p>Prose before the table. This paragraph must still be extracted.</p>
+
+<!-- Wide table with a real header row. -->
+<table id="wide">
+  <caption>Population by state (sample)</caption>
+  <thead>
+    <tr><th>State</th><th>Capital</th><th>Population</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Oregon</td><td>Salem</td><td>4,237,256</td></tr>
+    <tr><td>Washington</td><td>Olympia</td><td>7,738,692</td></tr>
+  </tbody>
+</table>
+
+<!-- Header-less two-column table: the Wikipedia infobox shape. Each row's own <th>
+     is that row's label, so "Founded: 1851" not a context-free "1851". -->
+<table id="infobox">
+  <caption>Seattle</caption>
+  <tr><th>Founded</th><td>1851</td></tr>
+  <tr><th>Population</th><td>737,015</td></tr>
+  <tr><th>Elevation</th><td>175 ft</td></tr>
+</table>
+
+<!-- Spanned cells. Wikipedia's real "largest companies by revenue" table rowspans the
+     Headquarters column across runs of rows sharing a country; a spanned row then
+     carries FEWER cells than there are headers, and naive positional zipping shifts
+     every label after the gap - emitting confidently WRONG data rather than missing
+     data. Found only by running against the live page. -->
+<h2>Spanned cells</h2>
+<table id="spanned">
+  <caption>Companies by region</caption>
+  <thead>
+    <tr><th>Rank</th><th>Name</th><th>Region</th><th>Ref</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1</td><td>Amazon</td><td rowspan="2">United States</td><td>[5]</td></tr>
+    <tr><td>2</td><td>Walmart</td><td>[6]</td></tr>
+    <tr><td>3</td><td>State Grid</td><td>China</td><td>[7]</td></tr>
+    <tr><td colspan="2">Subtotal</td><td>Mixed</td><td>[8]</td></tr>
+  </tbody>
+</table>
+
+<!-- Multi-value cells. An infobox cell holding a list or a br-separated run flattens
+     via textContent with NO delimiter, so the Apple article returned
+     "Steve JobsSteve WozniakRonald Wayne". -->
+<h2>Multi-value cells</h2>
+<table id="multivalue">
+  <tr><th>Founders</th><td><ul><li>Steve Jobs</li><li>Steve Wozniak</li><li>Ronald Wayne</li></ul></td></tr>
+  <tr><th>Offices</th><td>Cupertino<br>Austin<br>Cork</td></tr>
+</table>
+
+<!-- A cell wrapping its text in a paragraph: must emit ONCE (as part of the table row),
+     never also as a stray paragraph block. -->
+<table id="nested-block">
+  <tr><th>Note</th><td><p>Wrapped paragraph inside cell</p></td></tr>
+</table>
+
+<h2>Definition list</h2>
+<dl>
+  <dt>Grant</dt><dd>A scoped authorization bound to a session.</dd>
+  <dt>Capability</dt><dt>Confirmation</dt><dd>A single-use daemon-authored approval.</dd>
+</dl>
+
+<figure>
+  <figcaption>Figure 1. Previously dropped for the same allowlist reason as tables.</figcaption>
+</figure>
+
+<p>Prose after the table, also required.</p>
+</body>
+</html>

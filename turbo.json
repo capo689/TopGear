@@ -1,6 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
+  "globalPassThroughEnv": [
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+    "CI"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

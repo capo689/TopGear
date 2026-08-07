@@ -78,6 +78,13 @@ export const BatchResult = z.object({
   interruption: Interruption.optional(),
   invalidFields: z.array(ElementRecord).optional(),
   /**
+   * True when fill_record's default `all_forms` capture left record keys unresolved and a
+   * wider `full` capture resolved more, so the matches came from loose elements rather
+   * than a declared form boundary. Surfaced so a caller can tell an inferred match from a
+   * form-scoped one instead of trusting both equally.
+   */
+  matchedViaScopeFallback: z.boolean().optional(),
+  /**
    * Milliseconds the daemon spent waiting for navigation to settle during this batch (goto +
    * post-navigation re-capture). The daemon is the only component that knows when the page
    * settled, so it reports it here for the live-tier eval recorder to subtract from wall clock.
