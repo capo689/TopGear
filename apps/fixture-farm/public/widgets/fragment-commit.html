@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Fragment-commit combobox</title></head>
+<body>
+<h1>Fragment-commit combobox</h1>
+
+<!-- Reproduces a real Greenhouse phone-country picker (job-boards.greenhouse.io).
+     The option list offers "United States +1", but on commit the widget renders ONLY
+     the dial code "+1" as text - the country identity survives solely in a CSS class
+     (iti__flag iti__us), which carries no text at all.
+
+     "+1" is equally Canada, Antigua and a dozen other countries, so accepting it would
+     let the WRONG country pass verification. Reporting it as a mismatch would claim the
+     selection failed when it almost certainly succeeded. Neither is true: the correct
+     answer is verification_indeterminate. -->
+
+<label id="dial-label" for="dial">Country</label>
+<div class="select-shell">
+  <div class="select__control">
+    <div class="select__value-container">
+      <div class="select__single-value" id="dial-committed"></div>
+      <input id="dial" role="combobox" aria-autocomplete="list" aria-expanded="false"
+             aria-controls="dial-list" aria-labelledby="dial-label" autocomplete="off" type="text" />
+    </div>
+  </div>
+</div>
+<ul id="dial-list" role="listbox" hidden>
+  <li role="option" data-flag="us" data-dial="+1">United States +1</li>
+  <li role="option" data-flag="ca" data-dial="+1">Canada +1</li>
+  <li role="option" data-flag="gb" data-dial="+44">United Kingdom +44</li>
+</ul>
+
+<script>
+  const input = document.getElementById("dial");
+  const list = document.getElementById("dial-list");
+  const committed = document.getElementById("dial-committed");
+
+  function open() {
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+  function close() {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+  }
+  input.addEventListener("focus", open);
+  input.addEventListener("click", open);
+
+  for (const li of list.querySelectorAll('[role="option"]')) {
+    li.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      for (const o of list.querySelectorAll('[role="option"]')) o.removeAttribute("aria-selected");
+      li.setAttribute("aria-selected", "true");
+      // The whole point: the committed rendering keeps ONLY the dial code as text.
+      // The country lives in a class name, which no text extraction can read.
+      committed.innerHTML =
+        '<div class="iti__flag iti__' + li.dataset.flag + '"></div><span>' + li.dataset.dial + "</span>";
+      input.value = "";
+      close();
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+</script>
+</body>
+</html>

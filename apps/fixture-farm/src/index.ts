@@ -15,6 +15,8 @@ export const FIXTURES = {
   accordion: "/widgets/accordion.html",
   /** Debounced typeahead whose listbox is empty until text is typed (Slate shape). */
   asyncTypeahead: "/widgets/async-typeahead.html",
+  /** Commits only a fragment of the option label ("United States +1" -> "+1"). */
+  fragmentCommit: "/widgets/fragment-commit.html",
   /** Real fields with no <form> ancestor, beside an unrelated site-search form. */
   pseudoForm: "/forms/pseudo-form.html",
   /** Tables, infobox, spanned cells, multi-value cells, definition list, figcaption. */

@@ -621,7 +621,34 @@ export class Session {
       };
       const ok = wanted.some((w) => matches(state.committedValue, w) || matches(state.selectedLabel, w) || matches(state.value, w));
       const observed = [state.committedValue, state.value, state.selectedLabel].filter((s) => s !== undefined && s !== "").join(" / ");
-      return ok ? { ok: true } : { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed } };
+      if (ok) return { ok: true };
+
+      // G3: the widget committed SOMETHING, and what it committed is a fragment of what we
+      // asked for — the reverse of the G1 direction. Do NOT accept it (that is exactly the
+      // partial-commit hazard G1 exists to stop: a Greenhouse phone-country picker commits
+      // "United States +1" as the single token "+1", which is equally Canada or Antigua).
+      // But do not claim a MISMATCH either: that asserts the selection is wrong when it
+      // most likely succeeded and the widget merely dropped the distinguishing text on
+      // render. Report the true state so the caller resolves it with a screenshot or a
+      // region view instead of retrying an action that already worked.
+      const fragmentOf = wanted.find((w) => {
+        const o = observed.trim().toLowerCase();
+        const x = w.trim().toLowerCase();
+        return o !== "" && x.includes(o);
+      });
+      if (fragmentOf !== undefined) {
+        return {
+          ok: false,
+          failure: {
+            reason: "verification_indeterminate",
+            requested: fragmentOf,
+            committed: observed,
+            detail:
+              "the widget committed a value that is a fragment of the requested option, so it cannot be confirmed from text alone; verify with a screenshot or a region view rather than re-running this action",
+          },
+        };
+      }
+      return { ok: false, failure: { reason: "verification_mismatch", expected: wanted.join(","), observed } };
     }
     if (action.op === "set_date") {
       // Real read-back: the input's value must equal the ISO date we set.

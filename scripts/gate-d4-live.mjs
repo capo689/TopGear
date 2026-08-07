@@ -142,6 +142,7 @@ try {
       taughtCount: Array.isArray(tf.availableOptions) ? tf.availableOptions.length : undefined,
       widgetState: tf.widgetState,
       recoverValue: taught,
+      recoverReason: recover?.results?.[0]?.failure?.reason,
       recover: status ?? (recover ? JSON.stringify(recover.results?.[0]) : "skipped (nothing taught)"),
     });
     console.log(
@@ -156,7 +157,27 @@ try {
 
 const probed = rows.filter((r) => r.teachReason === "option_not_found" && (r.taughtCount ?? 0) > 0);
 const recovered = probed.filter((r) => r.recover === "verified");
+// A widget can be structurally unverifiable from text: the live Greenhouse phone-country
+// picker offers "United States +1" and commits only "+1", keeping the country solely in a
+// CSS class. That is not a recover FAILURE -- the action applied -- and it is not a pass
+// either, since "+1" is equally Canada. It is its own outcome and is named here rather
+// than folded into either bucket, because burying it in "verified" would be the exact
+// dishonesty this gate exists to catch.
+const indeterminate = probed.filter((r) => r.recoverReason === "verification_indeterminate");
+const broken = probed.filter((r) => r.recover !== "verified" && r.recoverReason !== "verification_indeterminate");
 console.log(`\nteach→recover on the same widget, consecutive calls: ${recovered.length}/${probed.length} verified`);
+if (indeterminate.length) {
+  console.log(
+    `unverifiable-from-text (action applied, widget discards the distinguishing text): ${indeterminate.length} — ${indeterminate
+      .map((r) => r.field)
+      .join(", ")}`,
+  );
+}
+if (broken.length) {
+  console.log(`genuine recover failures: ${broken.length} — ${broken.map((r) => `${r.field} (${r.recoverReason ?? r.recover})`).join(", ")}`);
+}
 const lied = rows.filter((r) => r.teachReason === "option_not_found" && r.taughtCount === 0);
 console.log(`fields reporting the ambiguous "availableOptions: []": ${lied.length} (${lied.map((r) => r.field).join(", ") || "none"})`);
-process.exit(probed.length > 0 && recovered.length === probed.length ? 0 : 1);
+// Fail on genuine breakage or on the ambiguous empty-list report; an honestly-reported
+// indeterminate does not fail the gate, but it is always printed above.
+process.exit(probed.length > 0 && broken.length === 0 && lied.length === 0 ? 0 : 1);

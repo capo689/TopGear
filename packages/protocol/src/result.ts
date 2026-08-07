@@ -11,6 +11,25 @@ import { ConfirmationCapability } from "./grant.js";
 export const FailureDetail = z.discriminatedUnion("reason", [
   z.object({ reason: z.literal("option_not_found"), availableOptions: z.array(z.string()) }),
   /**
+   * The action applied and the widget DID commit a value, but that value is not sufficient
+   * to prove the requested option was the one chosen. Distinct from
+   * `verification_mismatch`, which asserts the committed value is WRONG.
+   *
+   * Live case: a Greenhouse phone-country picker offers "United States +1" and, on commit,
+   * renders only "+1" — the country identity survives solely in a CSS class
+   * (`iti__flag iti__us`). "+1" is equally Canada, Antigua and a dozen others, so accepting
+   * it would let the wrong country pass verification; reporting it as a mismatch says the
+   * selection failed when it probably succeeded. Neither is true, so this reason says the
+   * true thing and lets the caller resolve it by another channel (screenshot, or a view of
+   * the surrounding region) instead of blindly retrying an action that already worked.
+   */
+  z.object({
+    reason: z.literal("verification_indeterminate"),
+    requested: z.string(),
+    committed: z.string(),
+    detail: z.string().optional(),
+  }),
+  /**
    * D4: the runtime could not READ this widget's options, so it does not know what it has.
    * Distinct from `option_not_found` with an empty list, which asserts the field genuinely
    * offers nothing. "I could not look" and "there is nothing there" are different facts and

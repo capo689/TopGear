@@ -28,3 +28,4 @@ test-results/
 
 # mcpb build artifacts (built via scripts/build-mcpb.mjs)
 *.mcpb
+scripts/.test-report.json
