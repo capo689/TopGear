@@ -54,6 +54,9 @@ importers:
       esbuild:
         specifier: ^0.24.2
         version: 0.24.2
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.1)
 
   apps/fixture-farm: {}
 
@@ -84,6 +87,10 @@ importers:
       '@browser-bridge/relay':
         specifier: workspace:*
         version: link:../../packages/relay
+    devDependencies:
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.1)
 
   packages/audit:
     dependencies:

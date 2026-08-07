@@ -1,0 +1,485 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Browser Bridge — test dashboard</title><style>
+:root{color-scheme:light}
+.viz{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+--grid:#e1e0d9;--base:#c3c2b7;--border:rgba(11,11,11,.10);
+--s1:#2a78d6;--s2:#eb6834;--good:#0ca30c;--warn:#fab219;--crit:#d03b3b}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme=light])) .viz{
+--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+--grid:#2c2c2a;--base:#383835;--border:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--crit:#e66767}}
+:root[data-theme=dark] .viz{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;
+--grid:#2c2c2a;--base:#383835;--border:rgba(255,255,255,.10);--s1:#3987e5;--s2:#d95926;--crit:#e66767}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:32px 24px 72px}
+h1{font-size:23px;font-weight:650;margin:0 0 4px}
+.sub{color:var(--ink2);font-size:14px;margin:0 0 26px;line-height:1.5}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:26px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile .l{font-size:12px;color:var(--ink2);margin-bottom:6px}
+.tile .v{font-size:29px;font-weight:640;letter-spacing:-.02em}
+.tile .n{font-size:11px;color:var(--muted);margin-top:3px}
+.v.good{color:var(--good)}.v.crit{color:var(--crit)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+padding:20px 22px;margin-bottom:18px}
+.card h2{font-size:15px;font-weight:640;margin:0 0 3px}
+.card p{font-size:13px;color:var(--ink2);margin:0 0 16px;line-height:1.55}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink2);margin-bottom:12px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:6px;vertical-align:-1px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font-weight:600;color:var(--ink2);border-bottom:1px solid var(--base);
+padding:7px 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+td{padding:6px 8px;border-bottom:1px solid var(--grid);vertical-align:top}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600}
+.pill.p{background:rgba(12,163,12,.13);color:var(--good)}
+.pill.i{background:rgba(250,178,25,.16);color:#8a6100}
+:root[data-theme=dark] .pill.i{color:var(--warn)}
+details{margin-top:10px}
+summary{cursor:pointer;font-size:13px;color:var(--s1);padding:5px 0}
+.tt{position:fixed;pointer-events:none;background:var(--ink);color:var(--surface);
+padding:6px 9px;border-radius:6px;font-size:12px;opacity:0;transition:opacity .1s;z-index:9}
+.btn{position:absolute;top:30px;right:24px;background:var(--surface);color:var(--ink);
+border:1px solid var(--border);border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer}
+.wrap{position:relative}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--ink2)}
+</style></head>
+<body class="viz"><div class="wrap">
+<button class="btn" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark'">Toggle theme</button>
+<h1>Browser Bridge — every feature under test</h1>
+<p class="sub">Branch <span class="mono">fix/silent-extraction-failures</span> · generated 2026-08-07T18:32:02.818Z from
+<span class="mono">scripts/.test-report.json</span>. Tests drive a real Chromium against the self-hosted fixture farm —
+nothing here is mocked. Gates additionally drive the built <span class="mono">.mcpb</span> over the MCP tool surface,
+and two of them hit live third-party pages and real production storage.</p>
+
+<div class="tiles">
+<div class="tile"><div class="l">Tests passing</div><div class="v good">310</div><div class="n">across 25 packages</div></div>
+<div class="tile"><div class="l">Failing</div><div class="v good">0</div><div class="n">0 skipped</div></div>
+<div class="tile"><div class="l">Gates passing</div><div class="v good">5/5</div><div class="n">incl. live pages + prod</div></div>
+<div class="tile"><div class="l">Suite runtime</div><div class="v">29.7s</div><div class="n">real browser</div></div>
+</div>
+
+<div class="card"><h2>Tests per package</h2>
+<p>Every workspace package with a suite. Grey bars are packages with a test script but no test files — a coverage
+gap, recorded rather than hidden. <span class="mono">backend</span> is interface-only; <span class="mono">extension</span>
+and <span class="mono">shim</span> are the browser-side half of the product and are the real gap.</p>
+<div class="legend"><span><span class="sw" style="background:var(--s1)"></span>tests passing</span>
+<span><span class="sw" style="background:var(--muted)"></span>no test files</span></div>
+<svg class="chart" viewBox="0 0 900 572" width="100%" height="572" role="img"><line x1="176" y1="14" x2="176" y2="558" stroke="var(--grid)" stroke-width="1"/><text x="176" y="569" fill="var(--muted)" font-size="10" text-anchor="middle">0</text><line x1="458.5531914893617" y1="14" x2="458.5531914893617" y2="558" stroke="var(--grid)" stroke-width="1"/><text x="458.5531914893617" y="569" fill="var(--muted)" font-size="10" text-anchor="middle">20</text><line x1="741.1063829787234" y1="14" x2="741.1063829787234" y2="558" stroke="var(--grid)" stroke-width="1"/><text x="741.1063829787234" y="569" fill="var(--muted)" font-size="10" text-anchor="middle">40</text><text x="167" y="27" fill="var(--ink2)" font-size="11.5" text-anchor="end">commons-ingest</text><rect x="176" y="16" width="664" height="14" rx="3" fill="var(--s1)"
+      data-t="commons-ingest: 47"/><text x="847" y="27" fill="var(--ink2)" font-size="11" font-weight="600">47</text><text x="167" y="48" fill="var(--ink2)" font-size="11.5" text-anchor="end">execution</text><rect x="176" y="37" width="437.9574468085106" height="14" rx="3" fill="var(--s1)"
+      data-t="execution: 31"/><text x="620.9574468085107" y="48" fill="var(--ink2)" font-size="11" font-weight="600">31</text><text x="167" y="69" fill="var(--ink2)" font-size="11.5" text-anchor="end">policy</text><rect x="176" y="58" width="395.5744680851064" height="14" rx="3" fill="var(--s1)"
+      data-t="policy: 28"/><text x="578.5744680851064" y="69" fill="var(--ink2)" font-size="11" font-weight="600">28</text><text x="167" y="90" fill="var(--ink2)" font-size="11.5" text-anchor="end">contribution</text><rect x="176" y="79" width="339.063829787234" height="14" rx="3" fill="var(--s1)"
+      data-t="contribution: 24"/><text x="522.063829787234" y="90" fill="var(--ink2)" font-size="11" font-weight="600">24</text><text x="167" y="111" fill="var(--ink2)" font-size="11.5" text-anchor="end">protocol</text><rect x="176" y="100" width="310.8085106382979" height="14" rx="3" fill="var(--s1)"
+      data-t="protocol: 22"/><text x="493.8085106382979" y="111" fill="var(--ink2)" font-size="11" font-weight="600">22</text><text x="167" y="132" fill="var(--ink2)" font-size="11.5" text-anchor="end">daemon</text><rect x="176" y="121" width="240.17021276595747" height="14" rx="3" fill="var(--s1)"
+      data-t="daemon: 17"/><text x="423.17021276595744" y="132" fill="var(--ink2)" font-size="11" font-weight="600">17</text><text x="167" y="153" fill="var(--ink2)" font-size="11.5" text-anchor="end">semantic-engine</text><rect x="176" y="142" width="226.04255319148936" height="14" rx="3" fill="var(--s1)"
+      data-t="semantic-engine: 16"/><text x="409.04255319148933" y="153" fill="var(--ink2)" font-size="11" font-weight="600">16</text><text x="167" y="174" fill="var(--ink2)" font-size="11.5" text-anchor="end">evals</text><rect x="176" y="163" width="211.91489361702128" height="14" rx="3" fill="var(--s1)"
+      data-t="evals: 15"/><text x="394.9148936170213" y="174" fill="var(--ink2)" font-size="11" font-weight="600">15</text><text x="167" y="195" fill="var(--ink2)" font-size="11.5" text-anchor="end">shim</text><rect x="176" y="184" width="183.6595744680851" height="14" rx="3" fill="var(--s1)"
+      data-t="shim: 13"/><text x="366.6595744680851" y="195" fill="var(--ink2)" font-size="11" font-weight="600">13</text><text x="167" y="216" fill="var(--ink2)" font-size="11.5" text-anchor="end">audit</text><rect x="176" y="205" width="169.531914893617" height="14" rx="3" fill="var(--s1)"
+      data-t="audit: 12"/><text x="352.531914893617" y="216" fill="var(--ink2)" font-size="11" font-weight="600">12</text><text x="167" y="237" fill="var(--ink2)" font-size="11.5" text-anchor="end">pattern-runner</text><rect x="176" y="226" width="141.27659574468086" height="14" rx="3" fill="var(--s1)"
+      data-t="pattern-runner: 10"/><text x="324.2765957446809" y="237" fill="var(--ink2)" font-size="11" font-weight="600">10</text><text x="167" y="258" fill="var(--ink2)" font-size="11.5" text-anchor="end">widget-patterns</text><rect x="176" y="247" width="127.14893617021276" height="14" rx="3" fill="var(--s1)"
+      data-t="widget-patterns: 9"/><text x="310.1489361702128" y="258" fill="var(--ink2)" font-size="11" font-weight="600">9</text><text x="167" y="279" fill="var(--ink2)" font-size="11.5" text-anchor="end">scheduler</text><rect x="176" y="268" width="113.02127659574468" height="14" rx="3" fill="var(--s1)"
+      data-t="scheduler: 8"/><text x="296.02127659574467" y="279" fill="var(--ink2)" font-size="11" font-weight="600">8</text><text x="167" y="300" fill="var(--ink2)" font-size="11.5" text-anchor="end">extension</text><rect x="176" y="289" width="113.02127659574468" height="14" rx="3" fill="var(--s1)"
+      data-t="extension: 8"/><text x="296.02127659574467" y="300" fill="var(--ink2)" font-size="11" font-weight="600">8</text><text x="167" y="321" fill="var(--ink2)" font-size="11.5" text-anchor="end">mcp-server</text><rect x="176" y="310" width="98.8936170212766" height="14" rx="3" fill="var(--s1)"
+      data-t="mcp-server: 7"/><text x="281.8936170212766" y="321" fill="var(--ink2)" font-size="11" font-weight="600">7</text><text x="167" y="342" fill="var(--ink2)" font-size="11.5" text-anchor="end">site-memory</text><rect x="176" y="331" width="98.8936170212766" height="14" rx="3" fill="var(--s1)"
+      data-t="site-memory: 7"/><text x="281.8936170212766" y="342" fill="var(--ink2)" font-size="11" font-weight="600">7</text><text x="167" y="363" fill="var(--ink2)" font-size="11.5" text-anchor="end">locators</text><rect x="176" y="352" width="84.7659574468085" height="14" rx="3" fill="var(--s1)"
+      data-t="locators: 6"/><text x="267.7659574468085" y="363" fill="var(--ink2)" font-size="11" font-weight="600">6</text><text x="167" y="384" fill="var(--ink2)" font-size="11.5" text-anchor="end">cli</text><rect x="176" y="373" width="84.7659574468085" height="14" rx="3" fill="var(--s1)"
+      data-t="cli: 6"/><text x="267.7659574468085" y="384" fill="var(--ink2)" font-size="11" font-weight="600">6</text><text x="167" y="405" fill="var(--ink2)" font-size="11.5" text-anchor="end">relay</text><rect x="176" y="394" width="70.63829787234043" height="14" rx="3" fill="var(--s1)"
+      data-t="relay: 5"/><text x="253.63829787234044" y="405" fill="var(--ink2)" font-size="11" font-weight="600">5</text><text x="167" y="426" fill="var(--ink2)" font-size="11.5" text-anchor="end">fixture-farm</text><rect x="176" y="415" width="70.63829787234043" height="14" rx="3" fill="var(--s1)"
+      data-t="fixture-farm: 5"/><text x="253.63829787234044" y="426" fill="var(--ink2)" font-size="11" font-weight="600">5</text><text x="167" y="447" fill="var(--ink2)" font-size="11.5" text-anchor="end">browser-playwright</text><rect x="176" y="436" width="56.51063829787234" height="14" rx="3" fill="var(--s1)"
+      data-t="browser-playwright: 4"/><text x="239.51063829787233" y="447" fill="var(--ink2)" font-size="11" font-weight="600">4</text><text x="167" y="468" fill="var(--ink2)" font-size="11.5" text-anchor="end">harvest-store</text><rect x="176" y="457" width="42.38297872340425" height="14" rx="3" fill="var(--s1)"
+      data-t="harvest-store: 3"/><text x="225.38297872340425" y="468" fill="var(--ink2)" font-size="11" font-weight="600">3</text><text x="167" y="489" fill="var(--ink2)" font-size="11.5" text-anchor="end">secrets</text><rect x="176" y="478" width="42.38297872340425" height="14" rx="3" fill="var(--s1)"
+      data-t="secrets: 3"/><text x="225.38297872340425" y="489" fill="var(--ink2)" font-size="11" font-weight="600">3</text><text x="167" y="510" fill="var(--ink2)" font-size="11.5" text-anchor="end">browser-extension</text><rect x="176" y="499" width="28.25531914893617" height="14" rx="3" fill="var(--s1)"
+      data-t="browser-extension: 2"/><text x="211.25531914893617" y="510" fill="var(--ink2)" font-size="11" font-weight="600">2</text><text x="167" y="531" fill="var(--ink2)" font-size="11.5" text-anchor="end">inspector-ui</text><rect x="176" y="520" width="28.25531914893617" height="14" rx="3" fill="var(--s1)"
+      data-t="inspector-ui: 2"/><text x="211.25531914893617" y="531" fill="var(--ink2)" font-size="11" font-weight="600">2</text><text x="167" y="552" fill="var(--ink2)" font-size="11.5" text-anchor="end">backend</text><rect x="176" y="541" width="0" height="14" rx="3" fill="var(--muted)"
+      data-t="backend: 0 (no test files)"/><text x="183" y="552" fill="var(--ink2)" font-size="11" font-weight="600">0 —</text><line x1="176" y1="14" x2="176" y2="558" stroke="var(--base)" stroke-width="1"/></svg></div>
+
+<div class="card"><h2>Gates — the shipping artifact, live pages, production storage</h2>
+<p>A unit suite cannot speak for these: each unpacks the built bundle and speaks MCP JSON-RPC to it, exactly as Claude does.</p>
+<div class="legend"><span><span class="sw" style="background:var(--s2)"></span>checks passed</span></div>
+<svg class="chart" viewBox="0 0 900 131" width="100%" height="131" role="img"><line x1="176" y1="14" x2="176" y2="117" stroke="var(--grid)" stroke-width="1"/><text x="176" y="128" fill="var(--muted)" font-size="10" text-anchor="middle">0</text><line x1="342" y1="14" x2="342" y2="117" stroke="var(--grid)" stroke-width="1"/><text x="342" y="128" fill="var(--muted)" font-size="10" text-anchor="middle">2</text><line x1="508" y1="14" x2="508" y2="117" stroke="var(--grid)" stroke-width="1"/><text x="508" y="128" fill="var(--muted)" font-size="10" text-anchor="middle">4</text><line x1="674" y1="14" x2="674" y2="117" stroke="var(--grid)" stroke-width="1"/><text x="674" y="128" fill="var(--muted)" font-size="10" text-anchor="middle">6</text><line x1="840" y1="14" x2="840" y2="117" stroke="var(--grid)" stroke-width="1"/><text x="840" y="128" fill="var(--muted)" font-size="10" text-anchor="middle">8</text><text x="167" y="27" fill="var(--ink2)" font-size="11.5" text-anchor="end">D4 teach &amp; recover (bundle)</text><rect x="176" y="16" width="664" height="14" rx="3" fill="var(--s2)"
+      data-t="D4 teach &amp; recover (bundle): 8"/><text x="847" y="27" fill="var(--ink2)" font-size="11" font-weight="600">8</text><text x="167" y="48" fill="var(--ink2)" font-size="11.5" text-anchor="end">D2/D3/D5 telemetry (bundle)</text><rect x="176" y="37" width="664" height="14" rx="3" fill="var(--s2)"
+      data-t="D2/D3/D5 telemetry (bundle): 8"/><text x="847" y="48" fill="var(--ink2)" font-size="11" font-weight="600">8</text><text x="167" y="69" fill="var(--ink2)" font-size="11.5" text-anchor="end">Track C two-vendor (live)</text><rect x="176" y="58" width="166" height="14" rx="3" fill="var(--s2)"
+      data-t="Track C two-vendor (live): 2"/><text x="349" y="69" fill="var(--ink2)" font-size="11" font-weight="600">2</text><text x="167" y="90" fill="var(--ink2)" font-size="11.5" text-anchor="end">INV-10 durable storage (prod)</text><rect x="176" y="79" width="415" height="14" rx="3" fill="var(--s2)"
+      data-t="INV-10 durable storage (prod): 5"/><text x="598" y="90" fill="var(--ink2)" font-size="11" font-weight="600">5</text><text x="167" y="111" fill="var(--ink2)" font-size="11.5" text-anchor="end">D4 on a live ATS page</text><rect x="176" y="100" width="166" height="14" rx="3" fill="var(--s2)"
+      data-t="D4 on a live ATS page: 2"/><text x="349" y="111" fill="var(--ink2)" font-size="11" font-weight="600">2</text><line x1="176" y1="14" x2="176" y2="117" stroke="var(--base)" stroke-width="1"/></svg>
+<table><thead><tr><th>Gate</th><th class="n">Checks</th><th>Result</th><th>Script</th></tr></thead><tbody><tr><td>D4 teach &amp; recover (bundle)</td><td class="n">8/8</td>
+<td><span class="pill p">PASS</span>
+</td>
+<td class="mono">gate-d4.mjs</td></tr><tr><td>D2/D3/D5 telemetry (bundle)</td><td class="n">8/8</td>
+<td><span class="pill p">PASS</span>
+</td>
+<td class="mono">gate-telemetry.mjs</td></tr><tr><td>Track C two-vendor (live)</td><td class="n">2/2</td>
+<td><span class="pill p">PASS</span>
+</td>
+<td class="mono">gate-trackc.mjs</td></tr><tr><td>INV-10 durable storage (prod)</td><td class="n">5/5</td>
+<td><span class="pill p">PASS</span>
+</td>
+<td class="mono">gate-inv10.mjs</td></tr><tr><td>D4 on a live ATS page</td><td class="n">2/3</td>
+<td><span class="pill p">PASS</span>
+ <span class="pill i">1 indeterminate</span></td>
+<td class="mono">gate-d4-live.mjs</td></tr></tbody></table></div>
+
+<div class="card"><h2>The defect this branch fixes, measured live</h2>
+<p>Content extraction returned success with all table content silently missing. Measured against the exact Wikipedia
+pages that failed the benchmark, before and after.</p>
+<div class="legend"><span><span class="sw" style="background:var(--crit)"></span>before</span>
+<span><span class="sw" style="background:var(--good)"></span>after</span></div>
+<svg class="chart" viewBox="0 0 900 122" width="100%" height="122" role="img"><text x="241" y="36" fill="var(--ink2)" font-size="11.5" text-anchor="end">Wikipedia revenue table (50 rows)</text><rect x="250" y="14" width="3" height="14" rx="3" fill="var(--crit)"
+        data-t="Wikipedia revenue table (50 rows) before: 0 blocks"/><text x="260" y="25" fill="var(--ink2)" font-size="11" font-weight="600">0 blocks</text><rect x="250" y="32" width="544.6575342465753" height="14" rx="3" fill="var(--good)"
+        data-t="Wikipedia revenue table (50 rows) after: 71 blocks"/><text x="801.6575342465753" y="43" fill="var(--ink2)" font-size="11" font-weight="600">71 blocks</text><text x="241" y="82" fill="var(--ink2)" font-size="11.5" text-anchor="end">Apple infobox facts</text><rect x="250" y="60" width="3" height="14" rx="3" fill="var(--crit)"
+        data-t="Apple infobox facts before: 0 blocks"/><text x="260" y="71" fill="var(--ink2)" font-size="11" font-weight="600">0 blocks</text><rect x="250" y="78" width="560" height="14" rx="3" fill="var(--good)"
+        data-t="Apple infobox facts after: 73 blocks"/><text x="817" y="89" fill="var(--ink2)" font-size="11" font-weight="600">73 blocks</text><line x1="250" y1="10" x2="250" y2="106" stroke="var(--base)" stroke-width="1"/></svg></div>
+
+<div class="card"><h2>Per-package detail</h2>
+<table><thead><tr><th>Package</th><th class="n">Passed</th><th class="n">Failed</th><th class="n">Time</th><th>Note</th></tr></thead>
+<tbody><tr><td>commons-ingest</td><td class="n">47</td><td class="n">0</td>
+<td class="n">214ms</td><td class="mono"></td></tr><tr><td>execution</td><td class="n">31</td><td class="n">0</td>
+<td class="n">3730ms</td><td class="mono"></td></tr><tr><td>policy</td><td class="n">28</td><td class="n">0</td>
+<td class="n">7ms</td><td class="mono"></td></tr><tr><td>contribution</td><td class="n">24</td><td class="n">0</td>
+<td class="n">320ms</td><td class="mono"></td></tr><tr><td>protocol</td><td class="n">22</td><td class="n">0</td>
+<td class="n">6ms</td><td class="mono"></td></tr><tr><td>daemon</td><td class="n">17</td><td class="n">0</td>
+<td class="n">1862ms</td><td class="mono"></td></tr><tr><td>semantic-engine</td><td class="n">16</td><td class="n">0</td>
+<td class="n">1087ms</td><td class="mono"></td></tr><tr><td>evals</td><td class="n">15</td><td class="n">0</td>
+<td class="n">12ms</td><td class="mono"></td></tr><tr><td>shim</td><td class="n">13</td><td class="n">0</td>
+<td class="n">3ms</td><td class="mono"></td></tr><tr><td>audit</td><td class="n">12</td><td class="n">0</td>
+<td class="n">6ms</td><td class="mono"></td></tr><tr><td>pattern-runner</td><td class="n">10</td><td class="n">0</td>
+<td class="n">2088ms</td><td class="mono"></td></tr><tr><td>widget-patterns</td><td class="n">9</td><td class="n">0</td>
+<td class="n">19303ms</td><td class="mono"></td></tr><tr><td>scheduler</td><td class="n">8</td><td class="n">0</td>
+<td class="n">198ms</td><td class="mono"></td></tr><tr><td>extension</td><td class="n">8</td><td class="n">0</td>
+<td class="n">5ms</td><td class="mono"></td></tr><tr><td>mcp-server</td><td class="n">7</td><td class="n">0</td>
+<td class="n">6ms</td><td class="mono"></td></tr><tr><td>site-memory</td><td class="n">7</td><td class="n">0</td>
+<td class="n">2ms</td><td class="mono"></td></tr><tr><td>locators</td><td class="n">6</td><td class="n">0</td>
+<td class="n">2ms</td><td class="mono"></td></tr><tr><td>cli</td><td class="n">6</td><td class="n">0</td>
+<td class="n">2ms</td><td class="mono"></td></tr><tr><td>relay</td><td class="n">5</td><td class="n">0</td>
+<td class="n">2ms</td><td class="mono"></td></tr><tr><td>fixture-farm</td><td class="n">5</td><td class="n">0</td>
+<td class="n">28ms</td><td class="mono"></td></tr><tr><td>browser-playwright</td><td class="n">4</td><td class="n">0</td>
+<td class="n">707ms</td><td class="mono"></td></tr><tr><td>harvest-store</td><td class="n">3</td><td class="n">0</td>
+<td class="n">2ms</td><td class="mono"></td></tr><tr><td>secrets</td><td class="n">3</td><td class="n">0</td>
+<td class="n">1ms</td><td class="mono"></td></tr><tr><td>browser-extension</td><td class="n">2</td><td class="n">0</td>
+<td class="n">108ms</td><td class="mono"></td></tr><tr><td>inspector-ui</td><td class="n">2</td><td class="n">0</td>
+<td class="n">1ms</td><td class="mono"></td></tr><tr><td>backend</td><td class="n">0</td><td class="n">0</td>
+<td class="n">0ms</td><td class="mono">no test files — coverage gap</td></tr></tbody></table>
+<details><summary>Show all 310 individual tests</summary>
+<table><thead><tr><th>Package</th><th>Test</th><th>Status</th><th class="n">Time</th></tr></thead><tbody><tr><td class="mono">commons-ingest</td><td>contribution authorization accepts a genuinely signed record</td>
+<td><span class="pill p">passed</span></td><td class="n">15ms</td></tr><tr><td class="mono">commons-ingest</td><td>contribution authorization rejects a forged signature (401) and never stores it</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">commons-ingest</td><td>contribution authorization rejects a record whose installId is not derived from its key (401) — cannot claim another id</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge ownership isolation only purges the caller's own install, never another's</td>
+<td><span class="pill p">passed</span></td><td class="n">9ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge ownership isolation rejects a bare installId with no proof (401)</td>
+<td><span class="pill p">passed</span></td><td class="n">3ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge ownership isolation rejects a forged ownership proof (401)</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge ownership isolation rejects an expired proof — an observed proof is not a permanent purge capability (401)</td>
+<td><span class="pill p">passed</span></td><td class="n">3ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge ownership isolation accepts bounded in-window replay of the same proof (200, by design)</td>
+<td><span class="pill p">passed</span></td><td class="n">5ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate limiting (COST-03) contributions: a single IP burst trips 429 past the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate limiting (COST-03) contributions: SAME IP rotating installId still trips 429 (the composite-key bug)</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate limiting (COST-03) contributions: SECONDARY bucket — one verified installId across many IPs trips 429</td>
+<td><span class="pill p">passed</span></td><td class="n">10ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate limiting (COST-03) purge: a single IP burst trips 429 past the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate limiting (COST-03) a different IP is not limited by another IP's burst</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 required cases (a)-(e) (a) same IP, ROTATING installId every request → still rate limited by IP</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 required cases (a)-(e) (b) same IP, same installId → limited by whichever bound trips first</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 required cases (a)-(e) (c) different IPs, same VERIFIED installId → installId bound trips, IP bound does not</td>
+<td><span class="pill p">passed</span></td><td class="n">10ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 required cases (a)-(e) (d) INVALID signatures consume the IP bucket but leave the installId bucket untouched</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 required cases (a)-(e) (e) a valid request from a fresh IP and fresh verified installId passes (not rate limited)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 P0 — trusted-IP bound (spoofed headers) a caller PREPENDING a rotating x-forwarded-for entry is STILL rate limited</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 P0 — trusted-IP bound (spoofed headers) x-real-ip is preferred over a conflicting client-supplied x-forwarded-for</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 P0 — trusted-IP bound (spoofed headers) x-vercel-forwarded-for is preferred over a conflicting client-supplied x-forwarded-for</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 P1 — the limiter covers malformed + oversize input 500 malformed bodies from one IP: 429s appear after the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>COST-03 P1 — the limiter covers malformed + oversize input 500 oversize bodies from one IP: 429s appear after the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function valid signed Class C record → 202 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">15ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function missing required fields → 400 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">3ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function missing publicKey → 400 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function disallowed top-level field → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function disallowed fingerprint field → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">4ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function non-string scalar field (typed store) → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function non-string fingerprint value → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function origin with query string → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function origin with a path → 422 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function oversize record → 413 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function forged signature → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function installId not derived from key → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>contributions parity: local stub === Vercel function valid record but no durable storage → 503 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function valid in-window ownership proof → 200 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function forged proof signature → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function bare installId with no proof → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function expired proof (issuedAt 10 min ago) → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function future-dated proof (issuedAt 10 min ahead) → 401 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function oversize purge body → 413 (P2: purge now has a size cap) — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>purge parity: local stub === Vercel function valid proof but no storage → 503 — both agree</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate-limit parity: stub === function on the 429 path (COST-03) a same-IP burst of valid records trips 429 at the same point in BOTH</td>
+<td><span class="pill p">passed</span></td><td class="n">38ms</td></tr><tr><td class="mono">commons-ingest</td><td>rate-limit parity: crossing a SATURATED IP bucket (COST-03 P1 ordering) oversize/malformed/missing/forged from a saturated IP: stub === function on each</td>
+<td><span class="pill p">passed</span></td><td class="n">42ms</td></tr><tr><td class="mono">commons-ingest</td><td>commons-ingest (INV-10 collection live, against the stub) collects Class C contributions end-to-end into quarantine, and the kill switch purges them</td>
+<td><span class="pill p">passed</span></td><td class="n">25ms</td></tr><tr><td class="mono">commons-ingest</td><td>commons-ingest (INV-10 collection live, against the stub) rejects malformed records</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — 20-field form in ONE batch fills every field and submits in a single act() (attach + act = 2 turns)</td>
+<td><span class="pill p">passed</span></td><td class="n">444ms</td></tr><tr><td class="mono">execution</td><td>R1 field-fixes — first live dogfood run (Ace) select verification matches on the option LABEL, not only its value (fix #1)</td>
+<td><span class="pill p">passed</span></td><td class="n">108ms</td></tr><tr><td class="mono">execution</td><td>R1 field-fixes — first live dogfood run (Ace) invalidFields reflects the FINAL state, incl. actions after the last click (fix #2)</td>
+<td><span class="pill p">passed</span></td><td class="n">184ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — dependent select in one batch with an embedded wait selects country, waits for the state select to enable, then selects state</td>
+<td><span class="pill p">passed</span></td><td class="n">394ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — prompt injection is blocked by the daemon gates a cross-origin submit behind confirmation even for a gullible model</td>
+<td><span class="pill p">passed</span></td><td class="n">59ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — prompt injection is blocked by the daemon rejects a model-fabricated capability id (cannot self-authorize)</td>
+<td><span class="pill p">passed</span></td><td class="n">58ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — confirmation spoofing is impossible mints a daemon-authored confirmation, allows once approved, and blocks replay</td>
+<td><span class="pill p">passed</span></td><td class="n">111ms</td></tr><tr><td class="mono">execution</td><td>M1 acceptance — grant escape fails with a teaching error denies navigation to an origin outside the grant</td>
+<td><span class="pill p">passed</span></td><td class="n">61ms</td></tr><tr><td class="mono">execution</td><td>M2 acceptance — fill_record (0 mid-form turns) matches a structured record to fields and fills them in ONE call</td>
+<td><span class="pill p">passed</span></td><td class="n">217ms</td></tr><tr><td class="mono">execution</td><td>M2 acceptance — consent-aware reflex ('Accept all' never auto-clicked) chooses necessary-only / reject, never Accept all</td>
+<td><span class="pill p">passed</span></td><td class="n">107ms</td></tr><tr><td class="mono">execution</td><td>M2 acceptance — consent-aware reflex ('Accept all' never auto-clicked) surfaces the banner (no click) when configured to surface</td>
+<td><span class="pill p">passed</span></td><td class="n">57ms</td></tr><tr><td class="mono">execution</td><td>M3 — goto_intent resolves via link graph and RE-CHECKS the origin (Fable M0 #1) navigates a resolved SAME-origin intent</td>
+<td><span class="pill p">passed</span></td><td class="n">71ms</td></tr><tr><td class="mono">execution</td><td>M3 — goto_intent resolves via link graph and RE-CHECKS the origin (Fable M0 #1) DENIES a resolved CROSS-origin intent — the resolved origin passes the grant check</td>
+<td><span class="pill p">passed</span></td><td class="n">68ms</td></tr><tr><td class="mono">execution</td><td>M3 — goto_intent resolves via link graph and RE-CHECKS the origin (Fable M0 #1) surfaces an unresolved intent (no guessing)</td>
+<td><span class="pill p">passed</span></td><td class="n">68ms</td></tr><tr><td class="mono">execution</td><td>M5-inherited security fixtures (expected-fail until M5) should gate a bland/icon-only destructive control</td>
+<td><span class="pill p">passed</span></td><td class="n">116ms</td></tr><tr><td class="mono">execution</td><td>M5-inherited security fixtures (expected-fail until M5) should gate a same-origin fetch()-based exfil of sensitive values</td>
+<td><span class="pill p">passed</span></td><td class="n">113ms</td></tr><tr><td class="mono">execution</td><td>tokenize splits camelCase and punctuation</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">execution</td><td>matchField (deterministic, no model) matches a camelCase key to the right field</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">execution</td><td>matchField (deterministic, no model) matches by autocomplete token</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">execution</td><td>matchField (deterministic, no model) reports unmatched when nothing scores</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">execution</td><td>matchField (deterministic, no model) surfaces ambiguity when two fields share a label</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">execution</td><td>matchField (deterministic, no model) routes a boolean value only to checkbox/radio</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">execution</td><td>select verification — fragment commit reports verification_indeterminate, not mismatch, when the commit is a fragment of the request</td>
+<td><span class="pill p">passed</span></td><td class="n">241ms</td></tr><tr><td class="mono">execution</td><td>select verification — fragment commit does NOT accept the fragment — a +1 commit can never prove which +1 country was chosen</td>
+<td><span class="pill p">passed</span></td><td class="n">145ms</td></tr><tr><td class="mono">execution</td><td>select verification — fragment commit still reports a real mismatch as a mismatch when the commit is unrelated</td>
+<td><span class="pill p">passed</span></td><td class="n">230ms</td></tr><tr><td class="mono">execution</td><td>select verification — fragment commit an exact commit still verifies — the G1 path is untouched</td>
+<td><span class="pill p">passed</span></td><td class="n">114ms</td></tr><tr><td class="mono">execution</td><td>fill_record — typeahead routing drives an async typeahead in ONE call by typing first, not polling a list that never loads</td>
+<td><span class="pill p">passed</span></td><td class="n">395ms</td></tr><tr><td class="mono">execution</td><td>fill_record — scope fallback on pages whose fields sit outside a &lt;form&gt; matches and fills real fields that have no &lt;form&gt; ancestor</td>
+<td><span class="pill p">passed</span></td><td class="n">109ms</td></tr><tr><td class="mono">execution</td><td>fill_record — scope fallback on pages whose fields sit outside a &lt;form&gt; flags the looser match, so a fallback match is not trusted like a form-scoped one</td>
+<td><span class="pill p">passed</span></td><td class="n">92ms</td></tr><tr><td class="mono">execution</td><td>fill_record — scope fallback on pages whose fields sit outside a &lt;form&gt; does NOT flag a fallback when the normal form scope already resolved everything</td>
+<td><span class="pill p">passed</span></td><td class="n">110ms</td></tr><tr><td class="mono">execution</td><td>fill_record — scope fallback on pages whose fields sit outside a &lt;form&gt; still reports genuinely-absent keys as unmatched rather than inventing a match</td>
+<td><span class="pill p">passed</span></td><td class="n">61ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore mints a capability with the injected nonce and a bound revision/origin</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore consumes a valid capability exactly once (single-use)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore rejects a capability after its TTL expires</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore rejects a capability used against a moved page revision</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore rejects a capability used against a different origin</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore rejects an unknown capability id</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>CapabilityStore will not consume a pending capability until a human approves it (INV-9)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — grant gating allows a low structural action within the grant</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">policy</td><td>authorize — grant gating denies an action on an origin outside the grant (grant-escape)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — grant gating denies a medium action when the grant ceiling excludes it (tier-escape)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — grant gating denies sensitive transmission to a destination outside the grant (exfiltration)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — grant gating denies everything once the grant has expired</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — high-risk confirmation flow (INV-9) requires confirmation and returns a daemon-authored normalized action</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — high-risk confirmation flow (INV-9) allows the action once a matching capability is minted and provided, then blocks replay</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>authorize — high-risk confirmation flow (INV-9) rejects a capability once the page revision has moved</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>decideReflex rejects non-essential on a consent banner that offers a reject option — never accept all</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">policy</td><td>decideReflex surfaces a consent banner with no clean reject/necessary-only option</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>decideReflex dismisses a non-task-relevant, non-consent popup</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>decideReflex surfaces a task-relevant modal instead of touching it</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>decideReflex never auto-dismisses a consent banner even when dismissal is enabled</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk escalates a high-intent labelled click to high</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk escalates a third-party submit to high</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk escalates a cross-origin POST carrying sensitive values to high (network backstop)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk treats a same-origin submit as medium</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk treats a plain click as low</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk treats upload as medium</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk treats new-origin navigation as medium and same-origin as low</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">policy</td><td>classifyRisk treats a plain fill as low and a sensitive fill as medium</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) inspects 100 records</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) leaks ZERO Class A/B data into contributions</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) actually filtered — some records were withheld as Class A and Class B</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) contributed records carry only public origins, no values, no query, day-granular</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) withholds a PUBLIC origin whose auth status is unknown (R1 finding)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classification audit (R1 gate) produces a human-readable report for the reviewer</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies EXPLICITLY unauthenticated public-origin structure as Class C</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies a public origin with UNKNOWN/absent auth DOWN to Class B (R1 finding)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies intranet / non-public origins as Class B</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies authenticated origins as Class B even on a public TLD</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies anything carrying a user value as Class A</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>classify (INV-6) classifies DOWN to B when public status is unknown</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>ContributionPipeline contributes only Class C, discards A/B, and strips values + query strings</td>
+<td><span class="pill p">passed</span></td><td class="n">4ms</td></tr><tr><td class="mono">contribution</td><td>ContributionPipeline skips entirely when consent is off</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>ContributionPipeline never throws on ingest failure — it queues for retry</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>ContributionPipeline kill switch turns consent off AND purges quarantined records</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>createRateLimiter (COST-03) (P0) bounds the map after 50k distinct keys — unconditional eviction under rotation</td>
+<td><span class="pill p">passed</span></td><td class="n">300ms</td></tr><tr><td class="mono">contribution</td><td>createRateLimiter (COST-03) (P0) per-request cost does not materially degrade at cap (ratio &lt; 10x, CI-stable)</td>
+<td><span class="pill p">passed</span></td><td class="n">9ms</td></tr><tr><td class="mono">contribution</td><td>createRateLimiter (COST-03) returns 0 when allowed, a positive Retry-After (seconds) when over the limit</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">contribution</td><td>createRateLimiter (COST-03) does not grow a saturated key unboundedly, and drains after the window (not a permanent penalty box)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>clientIp — trusted-header selection (COST-03 P0) takes the RIGHTMOST x-forwarded-for entry, never the client-set leftmost</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>clientIp — trusted-header selection (COST-03 P0) prefers x-vercel-forwarded-for over a conflicting x-forwarded-for</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>clientIp — trusted-header selection (COST-03 P0) prefers x-real-ip over a conflicting x-forwarded-for</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">contribution</td><td>clientIp — trusted-header selection (COST-03 P0) falls back to 'unknown' when no IP header is present</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>SemanticView round-trips a valid view</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">protocol</td><td>SemanticView rejects a view whose trust flag is not untrusted (INV-2)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>SemanticView rejects redacted-secret confusion only structurally, not semantically</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>Action accepts a fill with a plain string</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>Action accepts a fill with a SecretRef and never carries a raw value</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>Action accepts a nested if batch</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">protocol</td><td>Action rejects an unknown op</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>ViewScope accepts a content scope with a section region</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>authorization types round-trips a TaskGrant</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>authorization types round-trips a daemon-built ConfirmationCapability</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>FailureDetail + BatchResult discriminates a grant_denied failure</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>FailureDetail + BatchResult round-trips a batch result with a confirmation interruption</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>version exports a schema version string</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps accepts a normal flat batch</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps counts expanded actions through if branches</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps rejects too many top-level actions</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps accepts if-nesting exactly at the depth cap</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps rejects if-nesting deeper than the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkBatchCaps rejects too many expanded actions even when top-level is small</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkByteCap accepts a view under the cap</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkByteCap rejects a view over the cap with a teaching error</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">protocol</td><td>checkByteCap rejects an oversized screenshot</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">daemon</td><td>Daemon attaches with a capability handshake and returns a schema version</td>
+<td><span class="pill p">passed</span></td><td class="n">82ms</td></tr><tr><td class="mono">daemon</td><td>Daemon attach returns the initial view, so the first read is not a separate turn (fix #3)</td>
+<td><span class="pill p">passed</span></td><td class="n">147ms</td></tr><tr><td class="mono">daemon</td><td>Daemon eval telemetry: each attach starts a NEW run (runs never merge in one process)</td>
+<td><span class="pill p">passed</span></td><td class="n">333ms</td></tr><tr><td class="mono">daemon</td><td>Daemon D2: a cold navigation inside attach records pageLoadMs &gt; 0 (and a warm attach records 0)</td>
+<td><span class="pill p">passed</span></td><td class="n">207ms</td></tr><tr><td class="mono">daemon</td><td>Daemon D3: attach + fill_record emits TWO events, with fields populated from the result</td>
+<td><span class="pill p">passed</span></td><td class="n">233ms</td></tr><tr><td class="mono">daemon</td><td>Daemon views and acts through the session, enforcing the grant</td>
+<td><span class="pill p">passed</span></td><td class="n">139ms</td></tr><tr><td class="mono">daemon</td><td>Daemon captures a screenshot within the protocol cap</td>
+<td><span class="pill p">passed</span></td><td class="n">90ms</td></tr><tr><td class="mono">daemon</td><td>Daemon runs the full confirmation flow: gate → human approve → allow</td>
+<td><span class="pill p">passed</span></td><td class="n">111ms</td></tr><tr><td class="mono">daemon</td><td>Daemon never writes raw field values to the audit sink</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">daemon</td><td>Daemon resolves goto_intent from the recorded link graph, re-checking the origin</td>
+<td><span class="pill p">passed</span></td><td class="n">82ms</td></tr><tr><td class="mono">daemon</td><td>Daemon runs a harvest pattern and serves the corpus back via bridge_harvest (§8)</td>
+<td><span class="pill p">passed</span></td><td class="n">436ms</td></tr><tr><td class="mono">daemon</td><td>EvalTelemetry.fromEnv (installed-bundle control surface) is disabled when BB_EVAL_LOG is unset or empty</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">daemon</td><td>EvalTelemetry.fromEnv (installed-bundle control surface) is disabled when the host left the placeholder unsubstituted (never writes to that path)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">daemon</td><td>EvalTelemetry.fromEnv (installed-bundle control surface) is enabled with a real path and writes a JSONL event</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">daemon</td><td>telemetryStatusMessage (D5 — silent-off must be visible) says OFF and names the .mcpb-update cause when BB_EVAL_LOG is unset</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">daemon</td><td>telemetryStatusMessage (D5 — silent-off must be visible) says OFF and shows the raw value when the host left the placeholder unsubstituted</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">daemon</td><td>telemetryStatusMessage (D5 — silent-off must be visible) says ON with the path when telemetry is configured</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables emits one self-describing block per row, labelled by column header</td>
+<td><span class="pill p">passed</span></td><td class="n">111ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables serializes a header-less two-column table as key/value (infobox shape)</td>
+<td><span class="pill p">passed</span></td><td class="n">61ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables repeats a rowspan'd value into the rows it covers, keeping every label aligned</td>
+<td><span class="pill p">passed</span></td><td class="n">64ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables emits a colspan'd cell once, labelled by the first column it covers</td>
+<td><span class="pill p">passed</span></td><td class="n">57ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables separates list items and &lt;br&gt; runs inside a single cell</td>
+<td><span class="pill p">passed</span></td><td class="n">60ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — tables emits cell text exactly once when a cell wraps its content in a block element</td>
+<td><span class="pill p">passed</span></td><td class="n">58ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — other previously-dropped shapes pairs definition-list terms with their definitions</td>
+<td><span class="pill p">passed</span></td><td class="n">65ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — other previously-dropped shapes surfaces figcaption, which the allowlist dropped for the same reason as tables</td>
+<td><span class="pill p">passed</span></td><td class="n">52ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — other previously-dropped shapes still extracts ordinary prose either side of the table</td>
+<td><span class="pill p">passed</span></td><td class="n">52ms</td></tr><tr><td class="mono">semantic-engine</td><td>content blocks — other previously-dropped shapes reports table content under `content` scope too, not only `full`</td>
+<td><span class="pill p">passed</span></td><td class="n">55ms</td></tr><tr><td class="mono">semantic-engine</td><td>pageExtractor — native form extracts the 20-field form with names, roles, options, and refs</td>
+<td><span class="pill p">passed</span></td><td class="n">122ms</td></tr><tr><td class="mono">semantic-engine</td><td>pageExtractor — native form maps to a model-facing SemanticView: untrusted framing, no fingerprints</td>
+<td><span class="pill p">passed</span></td><td class="n">68ms</td></tr><tr><td class="mono">semantic-engine</td><td>pageExtractor — native form redacts password-type field values (INV-4)</td>
+<td><span class="pill p">passed</span></td><td class="n">49ms</td></tr><tr><td class="mono">semantic-engine</td><td>pageExtractor — hidden-content reading reads collapsed-but-present content without expanding, and flags lazy content</td>
+<td><span class="pill p">passed</span></td><td class="n">54ms</td></tr><tr><td class="mono">semantic-engine</td><td>pageExtractor — dependent selects reports the state select as disabled before a country is chosen</td>
+<td><span class="pill p">passed</span></td><td class="n">59ms</td></tr><tr><td class="mono">semantic-engine</td><td>scoped staleness (revision) classifies a target's own change as target-relevant and unrelated changes as noise</td>
+<td><span class="pill p">passed</span></td><td class="n">101ms</td></tr><tr><td class="mono">evals</td><td>scripted turn measurement measures the headline 20-field form: bridge batches, baselines loop</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">evals</td><td>scripted turn measurement beats both baselines &gt;= 3x on the 20-field form (the M1 turn target)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>scripted turn measurement never makes the bridge worse than a baseline on any workflow</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>baselineMatrix covers all 8 standard workflows</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">evals</td><td>baselineMatrix records the 20-field ratio at roughly 10x</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>live-recorder aggregates per-call events into one record per (workflow, arm, runIndex)</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">evals</td><td>live-recorder counts gates/interruptions and reports the terminal status</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>live-recorder separates arms and runs, and the summary shows a turn ratio vs baseline</td>
+<td><span class="pill p">passed</span></td><td class="n">8ms</td></tr><tr><td class="mono">evals</td><td>live-recorder parses JSONL and skips garbled lines</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>live-recorder ingests an externally-measured baseline (arm never touches the daemon) → two-arm table</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>evaluateGates passes when every gate is satisfied</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">evals</td><td>evaluateGates fails on safety FIRST, even if correctness would also fail</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>evaluateGates fails correctness when field accuracy is below threshold</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>evaluateGates fails autonomy when human intervention exceeds the ceiling</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">evals</td><td>evaluateGates never lets low turns compensate for a failed gate</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>frameForChrome writes a 4-byte little-endian length followed by the UTF-8 JSON body</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">shim</td><td>frameForChrome uses BYTE length, not character length, for multi-byte content</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) reads a whole frame delivered in one chunk</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) reassembles a frame split across chunks, including mid-header</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) returns every message when several frames arrive in one chunk</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) retains a trailing partial frame instead of losing or mangling it</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) drops a malformed frame but stays in sync for the next one</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createFrameReader (Chrome → shim) round-trips multi-byte content through frame and reader</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createLineReader (daemon → shim) reads complete newline-delimited messages</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createLineReader (daemon → shim) holds a partial line until its newline arrives</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>createLineReader (daemon → shim) ignores blank lines and drops a malformed line without killing the stream</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">shim</td><td>the trust hinge rejects a frame that parses as JSON but is not a valid relay result</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">shim</td><td>the trust hinge rejects a structurally-plausible message with a bad field type</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>AuditLogger writes a structured record with a timestamp and correlation id</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">audit</td><td>AuditLogger STRIPS any stray value field so a secret can never reach the sink</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>AuditLogger scrubs secret-shaped free text in the note field</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>AuditLogger preserves daemon reason codes for the confirm UI / audit trail</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">audit</td><td>AuditLogger threads a correlation id through a bound child logger</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>scrubText redacts a serialized SecretRef</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">audit</td><td>scrubText redacts sensitive key=value pairs</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>scrubText redacts bearer tokens</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>scrubText redacts long opaque blobs</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>scrubText leaves ordinary labels intact</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>looksLikeSecret flags secret-shaped text and clears ordinary text</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">audit</td><td>redactValue always returns the redaction placeholder</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">pattern-runner</td><td>pattern-runner output → classification audit (no leakage) harvests, derives structural candidates, and leaks ZERO — private origin withheld</td>
+<td><span class="pill p">passed</span></td><td class="n">238ms</td></tr><tr><td class="mono">pattern-runner</td><td>pattern-runner output → classification audit (no leakage) CONTRIBUTES structure from a public+unauthenticated origin but ZERO harvested text/values</td>
+<td><span class="pill p">passed</span></td><td class="n">217ms</td></tr><tr><td class="mono">pattern-runner</td><td>robots parses User-agent:* Disallow rules and matches by prefix</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">pattern-runner</td><td>CrawlPolicy allows an in-grant, robots-permitted URL</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">pattern-runner</td><td>CrawlPolicy refuses an origin outside the grant (covers auth walls)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">pattern-runner</td><td>CrawlPolicy refuses a robots-disallowed path</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">pattern-runner</td><td>PatternRunner — 50-page harvest (plan §8) harvests 50 pages in one run through the scheduler, then is queryable</td>
+<td><span class="pill p">passed</span></td><td class="n">1316ms</td></tr><tr><td class="mono">pattern-runner</td><td>PatternRunner — 50-page harvest (plan §8) honors robots (skips the disallowed page) and refuses out-of-grant origins</td>
+<td><span class="pill p">passed</span></td><td class="n">51ms</td></tr><tr><td class="mono">pattern-runner</td><td>PatternRunner — 50-page harvest (plan §8) stops harvesting when the page budget is exhausted</td>
+<td><span class="pill p">passed</span></td><td class="n">193ms</td></tr><tr><td class="mono">pattern-runner</td><td>PatternRunner — 50-page harvest (plan §8) surfaces drift as exceptions (recoverable in one turn)</td>
+<td><span class="pill p">passed</span></td><td class="n">70ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries detects the library WidgetKind and selects via one primitive</td>
+<td><span class="pill p">passed</span></td><td class="n">380ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries refuses a disabled combobox, waits out async options, and survives a rerender</td>
+<td><span class="pill p">passed</span></td><td class="n">433ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries teaches with available options when the option is missing</td>
+<td><span class="pill p">passed</span></td><td class="n">2462ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries D4(a): teach then recover on the SAME widget in consecutive calls, no intervening action</td>
+<td><span class="pill p">passed</span></td><td class="n">2525ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries D4(a): restores closed state on a widget that ignores Escape</td>
+<td><span class="pill p">passed</span></td><td class="n">2883ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries D4(b): an OPEN listbox with genuinely no options reports option_not_found with an empty list</td>
+<td><span class="pill p">passed</span></td><td class="n">2470ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries D4(b): a widget whose options cannot be read reports options_not_visible, never an empty option list</td>
+<td><span class="pill p">passed</span></td><td class="n">4360ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries D4(b): a widget with no observable open/closed state reports unknown, not closed</td>
+<td><span class="pill p">passed</span></td><td class="n">3679ms</td></tr><tr><td class="mono">widget-patterns</td><td>widget gauntlet — shared playbook across libraries drives a typeahead with search_pick</td>
+<td><span class="pill p">passed</span></td><td class="n">111ms</td></tr><tr><td class="mono">scheduler</td><td>Semaphore bounds concurrency to its permit count</td>
+<td><span class="pill p">passed</span></td><td class="n">57ms</td></tr><tr><td class="mono">scheduler</td><td>Scheduler — global governor (runaway agent) holds a global ceiling even when 100 distinct origins are hammered at once</td>
+<td><span class="pill p">passed</span></td><td class="n">94ms</td></tr><tr><td class="mono">scheduler</td><td>Scheduler — per-origin governor (competing agents) caps per-origin concurrency under 10 competing tasks on one origin</td>
+<td><span class="pill p">passed</span></td><td class="n">23ms</td></tr><tr><td class="mono">scheduler</td><td>Scheduler — profile mode clamps per-origin concurrency to &lt;= 2 and refuses bulk</td>
+<td><span class="pill p">passed</span></td><td class="n">23ms</td></tr><tr><td class="mono">scheduler</td><td>TaskBudget enforces maxPages</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">scheduler</td><td>TaskBudget enforces maxDownloadBytes</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">scheduler</td><td>withBackoff retries a retryable error then succeeds</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">scheduler</td><td>withBackoff does not retry a non-retryable error</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">extension</td><td>relay hub — the operate grant refuses every command until the user has granted Operate on a tab</td>
+<td><span class="pill p">passed</span></td><td class="n">3ms</td></tr><tr><td class="mono">extension</td><td>relay hub — the operate grant forwards to the granted tab once a grant exists</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 1, the native port rejects a command carrying the wrong nonce</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 1, the native port rejects a malformed message rather than forwarding it to the page</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 1, the native port binds the session nonce ONCE and never rebinds it</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 2, the content script does not pass through a result that fails validation</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 2, the content script does not let the content script forge a result for a different correlationId</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">extension</td><td>relay hub — hop 2, the content script passes a valid result straight back to the daemon</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">mcp-server</td><td>tool input schemas accepts a well-formed attach input and rejects one missing the grant</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">mcp-server</td><td>tool input schemas validates view and act inputs against the protocol shapes</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">mcp-server</td><td>handlers dispatch to the daemon attach → view → act</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">mcp-server</td><td>handlers dispatch to the daemon fill_record dispatches and returns matches</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">mcp-server</td><td>handlers dispatch to the daemon bridge_confirm only nudges the UI; it authors nothing</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">mcp-server</td><td>tool surface exposes exactly the COMPLETE 8 tools, all bridge_-prefixed</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">mcp-server</td><td>tool surface constructs an MCP server over a daemon</td>
+<td><span class="pill p">passed</span></td><td class="n">3ms</td></tr><tr><td class="mono">site-memory</td><td>InMemorySiteMemory caches and retrieves widget hints per origin</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">site-memory</td><td>InMemorySiteMemory tracks hit/miss stats and exposes all hints for contribution</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">site-memory</td><td>InMemorySiteMemory clears an origin (retroactive, for the kill switch path)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">site-memory</td><td>verifyWidgetHint (INV-3: hints are verified, lying hints fail closed) accepts a hint that still matches the live page</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">site-memory</td><td>verifyWidgetHint (INV-3: hints are verified, lying hints fail closed) rejects a hint that disagrees with the live page</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">site-memory</td><td>link graph stores and resolves an intent per origin (case-insensitive)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">site-memory</td><td>fingerprintKey is stable across equal fingerprints</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">locators</td><td>resolveLocator takes the fast path when the ref is still present</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">locators</td><td>resolveLocator resolves by role + name</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">locators</td><td>resolveLocator returns not_found when nothing matches</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">locators</td><td>resolveLocator falls through to scoring when the ref is stale but the name still matches</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">locators</td><td>resolveLocator returns an ambiguity band when two candidates score within the gap</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">locators</td><td>reresolveFingerprint — rerender survival re-resolves by fingerprint after the node is replaced and its structure changed</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks passes a healthy environment</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks fails on old Node and missing Chromium</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks HARD-fails when pnpm is not on PATH and prints the --install-directory fix (finding #4)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks only WARNS when the daemon socket is unreachable (not a hard fail)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks WARNS (not fails) when the extension bundle or native host is missing</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">cli</td><td>runDoctorChecks renders a readable report</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">relay</td><td>relay message validation accepts a well-formed command and rejects malformed ones</td>
+<td><span class="pill p">passed</span></td><td class="n">2ms</td></tr><tr><td class="mono">relay</td><td>relay message validation validates results</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">relay</td><td>trust boundaries (T5) content script honors runtime commands but IGNORES page-originated ones</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">relay</td><td>trust boundaries (T5) service worker only accepts commands from the native port with the right nonce</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">relay</td><td>trust boundaries (T5) service worker only accepts results from the content script (runtime)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">fixture-farm</td><td>fixture farm server serves the index on an ephemeral loopback port</td>
+<td><span class="pill p">passed</span></td><td class="n">13ms</td></tr><tr><td class="mono">fixture-farm</td><td>fixture farm server serves every catalogued fixture with 200</td>
+<td><span class="pill p">passed</span></td><td class="n">13ms</td></tr><tr><td class="mono">fixture-farm</td><td>fixture farm server serves the 20-field form with its key controls</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">fixture-farm</td><td>fixture farm server exposes the injection page as untrusted content (no directive is executed here)</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">fixture-farm</td><td>fixture farm server hard-404s a path-traversal attempt and never serves a file outside public/</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">browser-playwright</td><td>PlaywrightBackend — primitives + verification fills, checks, and reads back native fields</td>
+<td><span class="pill p">passed</span></td><td class="n">152ms</td></tr><tr><td class="mono">browser-playwright</td><td>PlaywrightBackend — primitives + verification reports option_not_found with available options</td>
+<td><span class="pill p">passed</span></td><td class="n">84ms</td></tr><tr><td class="mono">browser-playwright</td><td>PlaywrightBackend — primitives + verification handles the dependent select via a real wait (the M1 embedded-wait path)</td>
+<td><span class="pill p">passed</span></td><td class="n">361ms</td></tr><tr><td class="mono">browser-playwright</td><td>PlaywrightBackend — primitives + verification clicks submit and surfaces the resulting status alert</td>
+<td><span class="pill p">passed</span></td><td class="n">110ms</td></tr><tr><td class="mono">harvest-store</td><td>InMemoryHarvestStore dedupes by url + content hash</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">harvest-store</td><td>InMemoryHarvestStore ranks full-text search by term frequency</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">harvest-store</td><td>InMemoryHarvestStore exports the corpus in bounded chunks</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">secrets</td><td>InMemorySecretBroker resolves a ref to its value but never serializes it</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">secrets</td><td>InMemorySecretBroker exposes a hash for read-back, not the value</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">secrets</td><td>InMemorySecretBroker reports missing refs</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr><tr><td class="mono">browser-extension</td><td>ExtensionBackend over the real relay socket captures a view and fills fields through the daemon → socket → extension → tab chain</td>
+<td><span class="pill p">passed</span></td><td class="n">103ms</td></tr><tr><td class="mono">browser-extension</td><td>ExtensionBackend over the real relay socket returns a typed not_found through the relay for a missing ref</td>
+<td><span class="pill p">passed</span></td><td class="n">5ms</td></tr><tr><td class="mono">inspector-ui</td><td>describeConfirmation renders ONLY daemon-authored fields (never the model's words)</td>
+<td><span class="pill p">passed</span></td><td class="n">1ms</td></tr><tr><td class="mono">inspector-ui</td><td>ConfirmController approve/deny call back with the capability id (only the UI can approve)</td>
+<td><span class="pill p">passed</span></td><td class="n">0ms</td></tr></tbody></table></details>
+</div>
+</div>
+<div class="tt" id="tt"></div>
+<script>
+const tt=document.getElementById('tt');
+document.addEventListener('mouseover',e=>{const t=e.target.getAttribute&&e.target.getAttribute('data-t');
+if(t){tt.textContent=t;tt.style.opacity=1;tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-28)+'px';}});
+document.addEventListener('mousemove',e=>{if(tt.style.opacity==='1'){tt.style.left=(e.clientX+12)+'px';tt.style.top=(e.clientY-28)+'px';}});
+document.addEventListener('mouseout',e=>{if(e.target.getAttribute&&e.target.getAttribute('data-t'))tt.style.opacity=0;});
+</script></body></html>

@@ -11,10 +11,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rimraf dist *.tsbuildinfo"
+    "clean": "rimraf dist *.tsbuildinfo",
+    "test": "vitest run"
   },
   "dependencies": {
     "@browser-bridge/protocol": "workspace:*",
     "@browser-bridge/relay": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }

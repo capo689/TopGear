@@ -1,4 +1,4 @@
-import { serviceWorkerAcceptsCommand, serviceWorkerAcceptsResult } from "@browser-bridge/relay";
+import { createRelayHub } from "./relay-hub.js";
 
 /**
  * MV3 service worker — the relay's trusted hub. It talks to the native shim over a
@@ -15,39 +15,21 @@ const NATIVE_HOST = "com.browser_bridge.shim";
 type NativePort = ReturnType<typeof chrome.runtime.connectNative>;
 let nativePort: NativePort | null = null;
 let operateTabId: number | null = null;
-let operateNonce = "";
+
+// All trust logic lives in relay-hub.ts so it is testable without a browser.
+const hub = createRelayHub({
+  post: (msg) => nativePort?.postMessage(msg),
+  sendToTab: (tabId, command) => chrome.tabs.sendMessage(tabId, command),
+  getOperateTabId: () => operateTabId,
+});
 
 function connect(): void {
   if (nativePort) return;
   nativePort = chrome.runtime.connectNative(NATIVE_HOST);
-  nativePort.onMessage.addListener((raw) => void onNativeMessage(raw));
+  nativePort.onMessage.addListener((raw) => void hub.onNativeMessage(raw));
   nativePort.onDisconnect.addListener(() => {
     nativePort = null;
   });
-}
-
-async function onNativeMessage(raw: unknown): Promise<void> {
-  // Adopt the daemon's per-session nonce from its first command. The native port is only
-  // reachable by the daemon (via the signed shim), so this binds SW↔daemon for the
-  // session; the page can never originate a native-port command.
-  const maybe = raw as { nonce?: string };
-  if (!operateNonce && typeof maybe?.nonce === "string") operateNonce = maybe.nonce;
-  const accepted = serviceWorkerAcceptsCommand("native-port", raw, operateNonce);
-  if (!accepted.ok) {
-    nativePort?.postMessage({ kind: "result", correlationId: "unknown", ok: false, error: accepted.error });
-    return;
-  }
-  if (operateTabId === null) {
-    nativePort?.postMessage({ kind: "result", correlationId: accepted.value.correlationId, ok: false, error: "no operate grant" });
-    return;
-  }
-  const result = await chrome.tabs.sendMessage(operateTabId, accepted.value);
-  const checked = serviceWorkerAcceptsResult("runtime", result);
-  nativePort?.postMessage(
-    checked.ok
-      ? checked.value
-      : { kind: "result", correlationId: accepted.value.correlationId, ok: false, error: "invalid result from content script" },
-  );
 }
 
 chrome.action.onClicked.addListener((tab) => {

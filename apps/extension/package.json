@@ -8,13 +8,15 @@
   "scripts": {
     "build": "node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rimraf dist *.tsbuildinfo"
+    "clean": "rimraf dist *.tsbuildinfo",
+    "test": "vitest run"
   },
   "dependencies": {
     "@browser-bridge/relay": "workspace:*",
     "@browser-bridge/semantic-engine": "workspace:*"
   },
   "devDependencies": {
-    "esbuild": "^0.24.2"
+    "esbuild": "^0.24.2",
+    "vitest": "^2.1.9"
   }
 }

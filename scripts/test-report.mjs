@@ -21,8 +21,10 @@ for (const group of ["packages", "apps"]) {
     const pj = join(base, name, "package.json");
     if (!existsSync(pj)) continue;
     const json = JSON.parse(readFileSync(pj, "utf8"));
-    if (!json.scripts?.test) continue;
-    pkgs.push({ dir: join(base, name), name: json.name, group, short: name });
+    // Include packages with NO test script at all. Skipping them would let a package with
+    // zero coverage vanish from the report entirely, which reads as "not a gap" — the same
+    // silent-omission failure this whole branch is about.
+    pkgs.push({ dir: join(base, name), name: json.name, group, short: name, hasTestScript: !!json.scripts?.test });
   }
 }
 
@@ -31,6 +33,21 @@ const report = { generatedAt: new Date().toISOString(), packages: [] };
 for (const p of pkgs) {
   const out = join(work, `${p.short}.json`);
   let ok = true;
+  if (!p.hasTestScript) {
+    report.packages.push({
+      name: p.name,
+      short: p.short,
+      group: p.group,
+      ok: true,
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      durationMs: 0,
+      tests: [],
+      note: "no test script — coverage gap",
+    });
+    continue;
+  }
   try {
     execFileSync("npx", ["vitest", "run", "--reporter=json", `--outputFile=${out}`], {
       cwd: p.dir,
