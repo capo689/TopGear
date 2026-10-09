@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "MCP surface for the bridge: the 5 M1 tools (attach/view/act/screenshot/confirm) over the daemon.",
+  "description": "MCP surface for the bridge: the 8 bridge_* tools over the daemon.",
   "license": "Apache-2.0",
   "exports": {
     ".": {

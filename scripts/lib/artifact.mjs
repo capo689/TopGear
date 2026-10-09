@@ -8,14 +8,21 @@
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 
-/** The distributable's real path — what a person installs. */
-export const DISTRIBUTABLE = join(homedir(), "Desktop", "scratchpad", "browser-bridge.mcpb");
+/**
+ * The distributable's real path — what a person installs. Defaults to dist/browser-bridge.mcpb
+ * in this checkout; set BB_MCPB_PATH to keep it elsewhere (maintainers previously used
+ * ~/Desktop/scratchpad/browser-bridge.mcpb).
+ */
+export const DISTRIBUTABLE = process.env.BB_MCPB_PATH
+  ? resolve(process.env.BB_MCPB_PATH)
+  : join(dirname(fileURLToPath(import.meta.url)), "..", "..", "dist", "browser-bridge.mcpb");
 
 /**
  * Resolve which artifact a gate should exercise.

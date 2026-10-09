@@ -14,7 +14,7 @@
  * Prereq: `pnpm build` (so packages/mcp-server/dist/bin.js exists). Chromium is NOT bundled —
  * the installer runs `pnpm exec playwright install chromium` (same pinned version).
  *
- * Usage: node scripts/build-mcpb.mjs [outPath]   (default: ~/Desktop/scratchpad/browser-bridge.mcpb)
+ * Usage: node scripts/build-mcpb.mjs [outPath]   (default: dist/browser-bridge.mcpb, or $BB_MCPB_PATH)
  */
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
@@ -44,12 +44,14 @@ const manifest = {
   manifest_version: "0.2",
   name: "browser-bridge",
   display_name: "Browser Bridge",
-  version: "0.0.1",
+  version: "0.1.0",
   description:
-    "Model-agnostic runtime that lets any AI operate a browser at machine speed. The complete 8-tool bridge surface (plan §11) over an isolated Playwright browser. Needs Chromium " +
+    "Lets AI agents operate a browser reliably: 8 bridge_* tools over an isolated Playwright browser, with verified actions and confirmation for risky steps. Needs Chromium " +
     pwVersion +
-    " in the Playwright cache (run: pnpm exec playwright install chromium).",
-  author: { name: "Browser Bridge" },
+    " in the Playwright cache (run: npx playwright@" + pwVersion + " install chromium).",
+  author: { name: "Adam Cagle", url: "https://github.com/capo689/TopGear" },
+  repository: { type: "git", url: "https://github.com/capo689/TopGear" },
+  license: "Apache-2.0",
   server: {
     type: "node",
     entry_point: "server/index.js",
@@ -105,7 +107,7 @@ console.log("2/4 write manifest + package.json…");
 writeFileSync(join(work, "manifest.json"), JSON.stringify(manifest, null, 2));
 writeFileSync(
   join(work, "package.json"),
-  JSON.stringify({ name: "browser-bridge-mcpb", version: "0.0.1", type: "module", private: true, dependencies: { playwright: pwVersion } }, null, 2),
+  JSON.stringify({ name: "browser-bridge-mcpb", version: "0.1.0", type: "module", private: true, dependencies: { playwright: pwVersion } }, null, 2),
 );
 
 console.log(`3/4 vendor playwright@${pwVersion} (no browser download)…`);

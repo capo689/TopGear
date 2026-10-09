@@ -1,15 +1,36 @@
 {
   "name": "browser-bridge",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A model-agnostic runtime that lets any AI operate a browser at machine speed.",
+  "description": "Let AI agents operate a real browser reliably: an MCP server plus an optional Chrome extension, with verified actions and human confirmation for risky steps.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "browser-automation",
+    "ai-agents",
+    "playwright",
+    "chrome-extension",
+    "claude"
+  ],
+  "homepage": "https://github.com/capo689/TopGear#readme",
+  "bugs": {
+    "url": "https://github.com/capo689/TopGear/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/capo689/TopGear.git"
+  },
+  "author": "Adam Cagle",
   "license": "Apache-2.0",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
+    "bootstrap": "node scripts/setup.mjs",
+    "smoke": "node packages/mcp-server/scripts/smoke.mjs",
+    "doctor": "node apps/cli/dist/cli.js doctor",
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
