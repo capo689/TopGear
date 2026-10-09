@@ -12,7 +12,7 @@ import { startSocketRelay, ExtensionBackend, type SocketRelay } from "./index.js
  * REAL Unix socket with the REAL relay framing, and a fake extension (socket client)
  * executes the commands against real Chromium. The only unproven-here link is Chrome
  * loading the bundle + native-messaging registration — those are the human steps in
- * INSTALL.md.
+ * docs/install.md.
  */
 let farm: FixtureFarm;
 let playwright: BrowserBackend;

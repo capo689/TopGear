@@ -1,7 +1,7 @@
 /**
  * THE canonical distributable — one definition, imported by the builder and by every gate.
  *
- * The gate-integrity rule (CLAUDE.md) is about THIS path, not about "a bundle built the same
+ * The gate-integrity rule (docs/engineering/STANDING_LAW.md) is about THIS path, not about "a bundle built the same
  * way". A gate that builds its own throwaway proves the code compiles; it does not prove that
  * the file we hand people works. Four times now a gate has certified something other than the
  * thing that ships, so the resolution lives here and the default is never a temp directory.

@@ -11,7 +11,7 @@ import { validateResult } from "@browser-bridge/relay";
  * them on receipt — defense in depth). The signed Rust/Go production shim lands at M6.
  *
  * NOTE: the live end-to-end path (Chrome ↔ shim ↔ daemon socket) is verified manually;
- * see MILESTONE_STATUS.md.
+ * see docs/engineering/MILESTONE_STATUS.md.
  */
 const SOCKET_PATH = process.env.BB_SOCKET ?? "/tmp/browser-bridge.sock";
 

@@ -149,8 +149,8 @@ costs). Schema/role/grants were pre-built and hard-isolated; this wave wired the
    published root CA (a public cert, committed), **not** `rejectUnauthorized: false`.
 2. `db.<ref>.supabase.co` has **no A record** (IPv6 only) and Vercel is IPv4, so the pooler is
    mandatory. Probing both regional poolers with a deliberately bogus password identified the
-   tenant: `aws-0` → "tenant/user not found", `aws-1` → auth-secret error. **Session pooler
-   `aws-1-us-west-2.pooler.supabase.com:5432`.** The same probe confirmed the role exists with
+   tenant: `aws-0` → "tenant/user not found", `aws-1` → auth-secret error. **Session pooler:
+   the `aws-1` regional pooler (host omitted from public docs).** The same probe confirmed the role exists with
    no password set.
 
 **A third caught in production, honestly:** the first `installCommand` (`npm install --omit=dev`)
@@ -162,12 +162,12 @@ Production re-verified READY (`dpl_7zLaXVXMLqiAAeqdApzTnS32qmHG`, commit `9d5e78
 deployed functions were probed to prove `pg` RESOLVES AT RUNTIME (POST `{}` → clean 400/401, not
 a platform 500 — a missing module would have been a 500).
 
-### Isolation (shared Supabase project "max")
+### Isolation (shared Supabase project)
 
 `browser_bridge_app` is the isolation boundary because `/api/contributions` is a public
 unauthenticated write. It holds USAGE on `browser_bridge` and SELECT/INSERT/DELETE on one
 table — **no UPDATE** (signed records are immutable: insert → read back → purge). Verified: 0 of
-max's public tables SELECT-able.
+the shared project's public tables SELECT-able.
 
 **Loose thread closed.** `browser_bridge_app` inherited EXECUTE on
 `public.set_compton_gallery_updated_at()` via the PUBLIC pseudo-role. Postgres has no per-role
@@ -181,7 +181,7 @@ negative grant, so it was revoked FROM PUBLIC — blast radius one function. Mea
 | public-schema functions executable by the app role | 1 | **0** |
 
 USAGE on schema `public` is deliberately left alone: it is also PUBLIC-inherited, and revoking
-it from PUBLIC would break every other role in max. Schema usage with zero object privileges
+it from PUBLIC would break every other role in the shared project. Schema usage with zero object privileges
 grants nothing readable — measured: 0 functions executable, 0 tables selectable.
 
 ## INV-10 — still BLOCKED, now on one credential step (not on infrastructure)

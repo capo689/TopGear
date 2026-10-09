@@ -4,7 +4,7 @@ The goal is the first **field data**: real tasks, on real sites, in your signed-
 with turns / accuracy / failures captured. This is what unblocks M4 (which is honestly
 gated on R1/R1.5 usage — no faking it).
 
-Install first: `INSTALL.md` Path B (the extension). Then work through 3–5 small tasks and
+Install first: [`docs/install.md`](../install.md) Part 2 (the extension). Then work through 3–5 small tasks and
 fill one row per task in the table below. Copy the finished rows into
 `MILESTONE_STATUS.md` under "R1 field data".
 

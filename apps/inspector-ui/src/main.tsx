@@ -7,7 +7,7 @@ import { ConfirmController, type ConfirmCallbacks } from "./confirm.js";
  * Mount the confirm dialog for a pending, daemon-built confirmation. In the live app the
  * capability and callbacks come from the daemon's local channel; the callbacks call the
  * daemon's approveConfirmation (the only approval path). The live end-to-end mount is
- * verified manually (see MILESTONE_STATUS.md).
+ * verified manually (see docs/engineering/MILESTONE_STATUS.md).
  */
 export function mountConfirm(
   container: HTMLElement,

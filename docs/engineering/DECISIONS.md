@@ -405,11 +405,11 @@ this must be settled before any external release.**
   returning the real rowCount. Blob is abandoned outright, with no fallback path: a fallback
   would mean two storage contracts to keep honest, and the parity discipline already shows how
   expensive a second copy of a contract is.
-- **Shared-project isolation model.** The database is a SHARED Supabase project ("max"), so the
+- **Shared-project isolation model.** The database is a SHARED Supabase project, so the
   ingest role is the isolation boundary. `browser_bridge_app` has USAGE on schema
   `browser_bridge` and SELECT/INSERT/DELETE on one table — nothing else. `/api/contributions` is
   a PUBLIC UNAUTHENTICATED WRITE; if it ever held `service_role` or the postgres superuser, a
-  bug in it would reach that project's payment and API-key tables. Verified: 0 of max's public
+  bug in it would reach that project's payment and API-key tables. Verified: 0 of the shared project's public
   tables are SELECT-able by this role.
 - **Its one caveat: PUBLIC-inherited privileges on schema `public`.** `browser_bridge_app`
   inherited EXECUTE on `public.set_compton_gallery_updated_at()` via the PUBLIC pseudo-role.
@@ -417,7 +417,7 @@ this must be settled before any external release.**
   done, blast radius one function — anon/authenticated/service_role keep their EXPLICIT grants,
   the owner always has EXECUTE, and a trigger's EXECUTE privilege is checked at CREATE TRIGGER
   time (both triggers still attached). **USAGE on schema `public` is left alone deliberately**:
-  it too is PUBLIC-inherited, and revoking it from PUBLIC would break every other role in max
+  it too is PUBLIC-inherited, and revoking it from PUBLIC would break every other role in the shared project
   that depends on it. Schema usage without any object privileges grants nothing readable —
   measured: 0 public functions now executable, 0 public tables selectable.
 - **No UPDATE, ever.** The role has SELECT/INSERT/DELETE and deliberately NOT UPDATE. Records
@@ -427,8 +427,8 @@ this must be settled before any external release.**
 - **Session pooler, measured not guessed.** `db.<ref>.supabase.co` has NO A record (IPv6 only)
   and Vercel functions are IPv4, so the direct connection cannot work. Probing both regional
   poolers with a deliberately bogus password identified the tenant: `aws-0` answers "tenant/user
-  not found", `aws-1` answers with an auth-secret error — so `aws-1-us-west-2.pooler.supabase.com:5432`
-  is this project's session pooler. (The same probe confirmed the role exists with no password set.)
+  not found", `aws-1` answers with an auth-secret error — so the `aws-1` regional pooler (host omitted from
+  public docs) is this project's session pooler. (The same probe confirmed the role exists with no password set.)
 - **TLS is verified against a pinned Supabase root CA, not disabled.** Measured: the pooler
   presents a SELF-SIGNED chain, so the system CA store rejects it outright. The role password
   crosses this connection, so the fix is to pin Supabase's published root CA (a public

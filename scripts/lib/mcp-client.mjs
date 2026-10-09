@@ -1,7 +1,7 @@
 /**
  * A minimal MCP stdio client for gates: unpack the artifact, spawn ITS server, speak JSON-RPC.
  *
- * Gates must exercise the shipped artifact through the MCP tool surface (CLAUDE.md), so this is
+ * Gates must exercise the shipped artifact through the MCP tool surface (docs/engineering/STANDING_LAW.md), so this is
  * deliberately a client of the bundle's own `server/index.js` — not an import of workspace code.
  */
 import { spawn, execFileSync } from "node:child_process";
