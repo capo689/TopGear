@@ -1,7 +1,8 @@
 /**
- * Consent onboarding disclosure (§9.3). Plain-language, disclosed default-on for the
- * free client. The claims here are enforced by architecture (INV-6 classification), not
- * by server-side promise. The inspector-ui renders this at onboarding.
+ * Consent onboarding disclosure (§9.3). Plain-language. Contribution is OPT-IN: off until
+ * the user turns it on (matches `Consent`, which defaults to off). The claims here are
+ * enforced by architecture (INV-6 classification), not by server-side promise. The
+ * inspector-ui renders this at onboarding.
  */
 export const CONSENT_DISCLOSURE = [
   "Browser Bridge gets faster for everyone by learning the *structure* of public",
@@ -12,10 +13,10 @@ export const CONSENT_DISCLOSURE = [
 ].join(" ");
 
 export interface OnboardingChoice {
-  /** Class C public-structure contribution. Disclosed default-on; one click off. */
+  /** Class C public-structure contribution. Opt-in: off by default; one click toggles it. */
   contributeClassC: boolean;
 }
 
 export function defaultOnboarding(): OnboardingChoice {
-  return { contributeClassC: true };
+  return { contributeClassC: false };
 }
