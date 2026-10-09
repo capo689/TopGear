@@ -49,7 +49,7 @@ const manifest = {
     "Lets AI agents operate a browser reliably: 8 bridge_* tools over an isolated Playwright browser, with verified actions and confirmation for risky steps. Needs Chromium " +
     pwVersion +
     " in the Playwright cache (run: npx playwright@" + pwVersion + " install chromium).",
-  author: { name: "Adam Cagle", url: "https://github.com/capo689/TopGear" },
+  author: { name: "Adam R. Cagle", url: "https://adamcagle.com" },
   repository: { type: "git", url: "https://github.com/capo689/TopGear" },
   license: "Apache-2.0",
   server: {

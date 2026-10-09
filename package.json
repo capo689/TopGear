@@ -21,7 +21,7 @@
     "type": "git",
     "url": "git+https://github.com/capo689/TopGear.git"
   },
-  "author": "Adam Cagle",
+  "author": "Adam R. Cagle <https://adamcagle.com>",
   "license": "Apache-2.0",
   "packageManager": "pnpm@9.15.9",
   "engines": {
