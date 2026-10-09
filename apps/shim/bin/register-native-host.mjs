@@ -26,7 +26,10 @@ if (!existsSync(shimJs)) {
 }
 
 const launcher = resolve(here, "..", "dist", "shim-launcher.sh");
-writeFileSync(launcher, `#!/bin/sh\nexec node "${shimJs}" "$@"\n`);
+// Chrome starts native hosts with a minimal PATH (on macOS: /usr/bin:/bin:/usr/sbin:/sbin),
+// so a bare `node` is not found when Node came from Homebrew, nvm, fnm, volta, etc. Pin the
+// absolute path of the Node running this script instead.
+writeFileSync(launcher, `#!/bin/sh\nexec "${process.execPath}" "${shimJs}" "$@"\n`);
 chmodSync(launcher, 0o755);
 
 const manifest = {
