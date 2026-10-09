@@ -195,7 +195,15 @@ function getPool(connectionString: string): Pool {
   return pool;
 }
 
+/**
+ * Contributions are OFF unless COMMONS_INGEST_ENABLED is exactly "true". The commons is
+ * opt-in at the deployment as well as on the client: with the flag unset, nothing is
+ * accepted or written, whether or not SUPABASE_DB_URL is present.
+ */
+export const ingestEnabled = (): boolean => process.env.COMMONS_INGEST_ENABLED === "true";
+
 export default async function handler(req: any, res: any): Promise<void> {
+  if (!ingestEnabled()) return json(res, 410, { error: "contributions disabled" });
   try {
     return await handle(req, res);
   } catch (err) {

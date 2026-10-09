@@ -1,5 +1,6 @@
 /**
  * Health/config probe: reports whether durable quarantine storage is wired.
+ * "disabled" means COMMONS_INGEST_ENABLED is not "true", so nothing is accepted at all.
  *
  * "unconfigured" means exactly one thing — SUPABASE_DB_URL is absent, so POST /api/contributions
  * will 503 rather than accept a record it cannot durably store (INV-10). It reports only the
@@ -7,7 +8,7 @@
  */
 export default function handler(_req: unknown, res: any): void {
   try {
-    const storage = process.env.SUPABASE_DB_URL ? "supabase-postgres" : "unconfigured";
+    const storage = process.env.COMMONS_INGEST_ENABLED !== "true" ? "disabled" : process.env.SUPABASE_DB_URL ? "supabase-postgres" : "unconfigured";
     res.setHeader("content-type", "application/json");
     res.status(200).end(
       JSON.stringify({

@@ -1,3 +1,5 @@
+// These suites exercise the ingest path itself, so they run with the deployment opt-in on.
+process.env.COMMONS_INGEST_ENABLED = "true";
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { InstallIdentity } from "@browser-bridge/contribution";
 import { startCommonsIngest, type CommonsIngest } from "./server.js";

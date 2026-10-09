@@ -2,13 +2,13 @@ import type { DataClass } from "./classify.js";
 import type { ContributionRecord } from "./anonymize.js";
 
 /**
- * Consent state (§9.3). Class C contribution is disclosed default-on for the free
- * client; one toggle turns it off, respected instantly and retroactively (kill switch).
- * Enterprise policy can force it off; Class B is enforced regardless of any toggle.
+ * Consent state (§9.3). Class C contribution is OPT-IN: off until the user turns it on.
+ * Turning it off is respected instantly and retroactively (kill switch). Enterprise policy
+ * can force it off; Class B is enforced regardless of any toggle.
  */
 export class Consent {
   private _enabled: boolean;
-  constructor(defaultOn = true) {
+  constructor(defaultOn = false) {
     this._enabled = defaultOn;
   }
   get enabled(): boolean {
