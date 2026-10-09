@@ -36,3 +36,7 @@ jobs:
 
       - name: Test (unit + browser suites + fixture farm)
         run: pnpm test
+
+      # The built MCP server end to end over stdio, exactly as an MCP client starts it.
+      - name: Smoke test (MCP server over stdio)
+        run: pnpm smoke
