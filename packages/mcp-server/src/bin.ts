@@ -23,9 +23,11 @@ async function main(): Promise<void> {
   const harvestBackend = await createPlaywrightBackend({ headless: true, isolated: true });
 
   let backend: BrowserBackend;
+  let closeRelay: (() => Promise<void>) | undefined;
   if (process.env.BB_BACKEND === "extension") {
     const socketPath = process.env.BB_SOCKET ?? "/tmp/browser-bridge.sock";
     const relay = startSocketRelay(socketPath, randomUUID());
+    closeRelay = relay.close;
     process.stderr.write(`browser-bridge: extension relay listening on ${socketPath} — load the extension and click "Grant Operate on this tab"\n`);
     backend = new ExtensionBackend(relay.transport);
   } else {
@@ -38,6 +40,21 @@ async function main(): Promise<void> {
   const daemon = new Daemon({ backend, harvestBackend });
   const server = createMcpServer(daemon);
   await server.connect(new StdioServerTransport());
+
+  // Exit when the MCP client goes away. Without this, the open Chromium handles keep the
+  // event loop alive after the client closes stdin (or sends SIGTERM), leaving an orphaned
+  // node + Chromium behind every time a client restarts.
+  let shuttingDown = false;
+  const shutdown = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    setTimeout(() => process.exit(0), 3000).unref();
+    void Promise.allSettled([backend.shutdown(), harvestBackend.shutdown(), closeRelay?.()]).then(() => process.exit(0));
+  };
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 }
 
 main().catch((err) => {
